@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{consent.title}">Authorize · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+
+    <!-- Device Authorization Grant(user_code 존재): 기기 연결 문맥으로 안내한다(구글 device 패턴). -->
+    <div th:if="${deviceFlow}" class="alert alert-info" style="margin-bottom:16px;">
+        <span th:text="#{consent.device.info}">You are about to connect a device. Check that the code below matches the one shown on your device.</span>
+        <div class="secret" style="margin-top:8px;letter-spacing:2px;" th:text="${userCode}">WDJB-MJHT</div>
+    </div>
+
+    <h1 class="auth-title">
+        <span th:if="${deviceFlow}" th:text="#{consent.device.heading(${clientName})}">Connect demo-app device</span>
+        <span th:unless="${deviceFlow}" th:text="#{consent.heading(${clientName})}">Sign in to demo-app</span>
+    </h1>
+    <p class="auth-subtitle" th:text="#{consent.requests(${clientName})}">
+        demo-app is requesting the following
+    </p>
+    <p class="hint" th:text="#{consent.continueAs(${principalName})}">Continue as user@example.com</p>
+
+    <form method="post" th:action="${formAction}">
+        <input type="hidden" name="client_id" th:value="${clientId}">
+        <input type="hidden" name="state" th:value="${state}">
+        <input type="hidden" name="user_code" th:value="${userCode}" th:if="${userCode != null}">
+
+        <ul class="scope-list">
+            <li th:each="s : ${scopes}">
+                <input type="hidden" name="scope" th:value="${s.scope}">
+                <span th:text="${s.description}">View your email address</span>
+            </li>
+        </ul>
+
+        <div th:if="${not #lists.isEmpty(previouslyApprovedScopes)}">
+            <p class="hint" th:text="#{consent.previouslyApproved}">Previously granted</p>
+            <ul class="scope-list">
+                <li th:each="s : ${previouslyApprovedScopes}">
+                    <span th:text="${s.description}">View your email address</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="actions">
+            <!-- authorization_code: 취소 = 계정 페이지로 복귀(동의 흐름 이탈). -->
+            <a th:unless="${deviceFlow}" class="link" href="/account" th:text="#{common.cancel}">Cancel</a>
+            <button type="submit" class="btn-primary" th:text="#{consent.allow}">Allow</button>
+        </div>
+    </form>
+
+    <!-- Device flow 거부: scope 없이 device verification 에 제출하면 SAS 가 device_code 를 무효화하고
+         기기 폴링에 access_denied 를 돌려준다(적극적 거부). 폼 중첩 금지라 별도 sibling 폼으로 둔다. -->
+    <form th:if="${deviceFlow}" method="post" th:action="@{/oauth2/device_verification}" style="margin-top:12px;">
+        <input type="hidden" name="client_id" th:value="${clientId}">
+        <input type="hidden" name="state" th:value="${state}">
+        <input type="hidden" name="user_code" th:value="${userCode}">
+        <div class="actions">
+            <button type="submit" class="btn-secondary" th:text="#{consent.deny}">Deny</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

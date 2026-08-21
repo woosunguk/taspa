@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{device.activated.title}">Device connected · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{device.activated.heading}">Your device is connected</h1>
+    <p class="auth-subtitle" th:text="#{device.activated.subtitle}">
+        You can now close this window and return to your device. Sign-in will complete there.
+    </p>
+    <div class="actions">
+        <a class="link" href="/account" th:text="#{device.activated.gotoAccount}">Go to my account</a>
+    </div>
+</main>
+</body>
+</html>

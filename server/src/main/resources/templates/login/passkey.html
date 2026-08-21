@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{login.signin.title}">Sign in · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{login.passkey.heading}">Verify it's you</h1>
+
+    <div class="email-chip">
+        <span class="dot" th:text="${#strings.substring(email,0,1)}">u</span>
+        <span th:text="${email}">user@example.com</span>
+    </div>
+
+    <p class="auth-subtitle" th:text="#{login.passkey.subtitle}">Confirm it's you with your fingerprint, face, or screen lock</p>
+
+    <div class="actions">
+        <a class="link link-muted" href="/login/password" th:text="#{common.tryAnotherWay}">Try another way</a>
+        <button type="button" class="btn-primary" id="passkey-signin" th:text="#{common.continue}">Continue</button>
+    </div>
+</main>
+
+<script src="/js/webauthn.js"></script>
+<script th:inline="javascript">
+    const csrfHeaders = {[[${_csrf.headerName}]]: [[${_csrf.token}]]};
+    setupLogin(csrfHeaders, '', document.getElementById('passkey-signin'));
+</script>
+</body>
+</html>

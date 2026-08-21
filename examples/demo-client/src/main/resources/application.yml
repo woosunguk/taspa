@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: taspa-demo-client
+  security:
+    oauth2:
+      client:
+        registration:
+          taspa:
+            # dev 프로파일의 taspa 가 시딩하는 demo-app(RegisteredClientConfig)과 정확히 일치해야 한다.
+            # [경고] 아래 자격 증명은 로컬 데모 전용이다 — 운영에서는 절대 재사용/커밋하지 말 것.
+            # 운영 클라이언트는 관리 콘솔(/admin/clients)에서 별도 발급하고 secret 은
+            # 환경변수/시크릿 매니저로 주입한다.
+            client-id: demo-app
+            client-secret: demo-secret
+            client-name: taspa
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/taspa"
+            scope: openid, profile, email
+        provider:
+          taspa:
+            # issuer-uri 를 쓰지 않는다 — issuer-uri 는 기동 시점에 OIDC 디스커버리
+            # (/.well-known/openid-configuration) HTTP 호출을 강제하므로, taspa 가 떠 있지 않으면
+            # 이 앱의 부팅(과 컨텍스트를 로드하는 빌드)이 깨진다. 데모/빌드가 taspa 와 독립적으로
+            # 동작하도록 엔드포인트를 명시한다(값은 디스커버리 문서와 동일).
+            # [트레이드오프] issuer-uri 가 없으면 Spring Security 는 ID 토큰의 iss 클레임 등가
+            # 검증을 건너뛴다(서명 검증은 jwk-set-uri 로 계속 수행). jwk-set-uri 가 taspa 로
+            # 고정돼 있어 로컬 데모에서는 감수하지만, 프로덕션 클라이언트는 issuer-uri
+            # (디스커버리) 방식을 권장한다 — docs/integration-guide.md 참고.
+            authorization-uri: http://localhost:9100/oauth2/authorize
+            token-uri: http://localhost:9100/oauth2/token
+            jwk-set-uri: http://localhost:9100/oauth2/jwks
+            user-info-uri: http://localhost:9100/userinfo
+            user-name-attribute: sub
+
+server:
+  port: 8080

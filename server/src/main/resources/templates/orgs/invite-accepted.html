@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{invite.accept.done.title}">Invitation accepted · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{invite.accept.done.heading}">You have joined the organization</h1>
+    <p class="auth-subtitle" th:text="#{invite.accept.done.subtitle(${orgName})}">You are now a member.</p>
+    <!--
+      ★1순위 CTA 는 **식권**이다. 초대를 수락한 사람이 다음에 하고 싶은 일은 계정 설정 확인이 아니라
+      점심을 먹는 것인데, 예전에는 출구가 '내 계정' 하나뿐이라 방금 얻은 혜택으로 가는 길이 없었다.
+      링크는 **상대 경로** — 공개 오리진이 웹 티어면 그대로 SPA 화면으로 이어진다.
+    -->
+    <div class="actions end">
+        <a class="btn-primary" href="/meal" th:text="#{invite.accept.done.toMeal}">Use my meal pass</a>
+    </div>
+    <div class="stack-links">
+        <a class="link" href="/console" th:if="${role == 'ORG_ADMIN'}"
+           th:text="#{invite.accept.done.toConsole}">Manage the organization</a>
+        <a class="link" href="/account" th:text="#{invite.accept.done.toAccount}">Go to my account</a>
+    </div>
+</main>
+</body>
+</html>

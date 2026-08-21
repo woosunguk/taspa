@@ -1,0 +1,321 @@
+{
+  "version": 1,
+  "jobId": "238eda09-7f61-4412-8374-d48e76c862f2",
+  "sessionId": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+  "scopeKey": "9814d438fdff3278b8a61439b93326e0bea4dd0fbf609e48052d77f981224a9e",
+  "revision": 44,
+  "createdAt": "2026-08-21T00:29:08.675Z",
+  "updatedAt": "2026-08-21T00:29:10.658Z",
+  "producerGraceExpiresAt": "2026-08-21T00:29:38.676Z",
+  "bestEffortDeadlineAt": "2026-08-21T00:30:29.676Z",
+  "producers": {
+    "core": {
+      "state": "sealed",
+      "intentKey": "395feb9f7b43c1d80833e125d16e1e97af729b927d629dde8dcdd8538de2f4de",
+      "payloadDigest": "395feb9f7b43c1d80833e125d16e1e97af729b927d629dde8dcdd8538de2f4de",
+      "sealedAt": "2026-08-21T00:29:08.809Z",
+      "sealedBy": "foreground"
+    },
+    "wiki": {
+      "state": "no-op",
+      "sealedAt": "2026-08-21T00:29:08.675Z",
+      "sealedBy": "wiki-producer"
+    }
+  },
+  "actions": {
+    "foreground-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 0,
+      "idempotencyKey": "febf6dba2f2536433960a07f7cedce72e946b43ced0896570df80f017b8914d2",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {},
+        "foregroundResult": {
+          "removedTransientFiles": 0,
+          "completedAt": "2026-08-21T00:29:08.807Z"
+        }
+      },
+      "budgetMs": 9000,
+      "completedAt": "2026-08-21T00:29:08.809Z",
+      "lastOutcomeCode": "completed"
+    },
+    "wiki-capture": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 0,
+      "idempotencyKey": "1719cd1ef5b51e0269b78c4cb8c9308c9c1f7b82fd1c067fc034c060f23863f5",
+      "payload": {},
+      "budgetMs": 9000,
+      "completedAt": "2026-08-21T00:29:08.675Z"
+    },
+    "team-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "cee6ac31df545408e1e822247ac249b3f8182a98a5fe8e448ae3b251e55bdee1",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-08-21T00:29:08.916Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "e1c86c14-7d3f-4de8-8575-1dcb61ac1454",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:09.142Z"
+    },
+    "python-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "1f1370c4ac056606059d517e2f106b602d8cbcb04587b3fcc5f3b9f89e649cd0",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-08-21T00:29:09.210Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "38714a92-3598-48d9-b082-aa3b5225a5b9",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:09.452Z"
+    },
+    "reply-cleanup": {
+      "class": "required",
+      "phase": "deferred-required",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "0b3a8b47c28b26d56aca004d4f572b96c118f16819c0d35162418816f9a5420a",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 9000,
+      "claimedAt": "2026-08-21T00:29:09.516Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "223fe633-44d6-420d-bd2c-443f2a6646fd",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:09.747Z"
+    },
+    "callback": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "d068ede2655bf89e0c0950e087d0603d7dcf45538e94f20a654d08c6f4841895",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-08-21T00:29:09.825Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "ccc5b1d5-03d4-4771-a3fb-a5384d083545",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:10.025Z"
+    },
+    "notification": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "89c0438ff63097ce04beb60efb87292ff68a7af350a0ee331f3de9dbf42d62fc",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-08-21T00:29:10.088Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "488ac4bd-2f81-4863-bc1a-be97370328fa",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:10.308Z"
+    },
+    "openclaw": {
+      "class": "best-effort",
+      "phase": "deferred-best-effort",
+      "status": "completed",
+      "attempts": 1,
+      "idempotencyKey": "31fe8f6e1cf204e27006de511df257326fdd98655122ca437013e8779ffc735b",
+      "payload": {
+        "transcriptPath": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+        "cwd": "/Users/woosunguk/workspace/taspa",
+        "reason": "other",
+        "input": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "transcript_path": "/Users/woosunguk/.claude/projects/-Users-woosunguk-workspace-taspa/ed5d4920-9d93-4a9b-9acc-c08598e8f2b5.jsonl",
+          "cwd": "/Users/woosunguk/workspace/taspa",
+          "hook_event_name": "SessionEnd",
+          "reason": "other"
+        },
+        "metrics": {
+          "session_id": "ed5d4920-9d93-4a9b-9acc-c08598e8f2b5",
+          "ended_at": "2026-08-21T00:29:08.671Z",
+          "reason": "other",
+          "agents_spawned": 0,
+          "agents_completed": 0,
+          "modes_used": []
+        },
+        "initialTeamNames": [],
+        "openClawEnabled": false,
+        "openClawRouting": {}
+      },
+      "budgetMs": 2000,
+      "claimedAt": "2026-08-21T00:29:10.364Z",
+      "runner": {
+        "attempt": 1,
+        "runnerNonce": "fdfefdaf-9bf7-4caf-b05c-6981a3cfcb49",
+        "phase": "terminal",
+        "deadlineAt": "2026-08-21T00:29:18.849Z"
+      },
+      "lastOutcomeCode": "completed",
+      "completedAt": "2026-08-21T00:29:10.589Z"
+    }
+  },
+  "owner": null,
+  "phase": "complete",
+  "completion": {
+    "completedAt": "2026-08-21T00:29:10.632Z",
+    "terminalDigest": "f98d5dd13360db76d2624c9b8a46f3654fdd82a95f559a373e63bb1236678331",
+    "terminalRevision": 43
+  }
+}

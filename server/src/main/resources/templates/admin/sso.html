@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.sso.title}">Enterprise SSO · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" class="active" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.sso.connHeading}">SSO connections</h2>
+    <div id="conn-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.sso.empty}">No registered connections</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th>registration_id</th>
+                <th th:text="#{admin.sso.col.name}">Name</th>
+                <th th:text="#{admin.sso.col.protocol}">Protocol</th>
+                <th th:text="#{admin.sso.col.status}">Status</th>
+                <th th:text="#{admin.sso.col.domains}">Domains</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="conn-list"></tbody>
+        </table>
+    </div>
+
+    <hr class="divider">
+
+    <h2 class="auth-title" style="font-size:18px;" id="form-title" th:text="#{admin.sso.formNew}">Register a new connection</h2>
+
+    <div class="field" style="margin-top:16px;">
+        <label for="registration-id" th:text="#{admin.sso.regIdLabel}">registration_id (path identifier — lowercase, digits, hyphen)</label>
+        <input type="text" id="registration-id" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="display-name" th:text="#{admin.sso.displayNameLabel}">Display name</label>
+        <input type="text" id="display-name" autocomplete="off">
+    </div>
+
+    <p class="hint" style="margin:0 0 4px;" th:text="#{admin.sso.protocolLabel}">Protocol (cannot be changed after registration)</p>
+    <div class="check-row">
+        <label><input type="radio" name="protocol" value="OIDC" checked onchange="onProtocolChange()"> <span th:text="#{admin.sso.protocolOidc}">Organization OIDC</span></label>
+        <label><input type="radio" name="protocol" value="SAML" onchange="onProtocolChange()"> <span th:text="#{admin.sso.protocolSaml}">SAML 2.0</span></label>
+    </div>
+
+    <p class="hint" style="margin:12px 0 4px;" th:text="#{admin.sso.policyLabel}">Policy</p>
+    <div class="check-row">
+        <label><input type="checkbox" id="enabled" checked> <span th:text="#{admin.sso.enabled}">Enabled</span></label>
+        <label><input type="checkbox" id="enforced" checked> <span th:text="#{admin.sso.enforced}">Enforce SSO on domain match (HRD)</span></label>
+        <label><input type="checkbox" id="trust-idp-mfa"> <span th:text="#{admin.sso.trustIdpMfa}">Trust external IdP MFA (skip local MFA)</span></label>
+    </div>
+
+    <div class="field" style="margin-top:12px;">
+        <label for="domains" th:text="#{admin.sso.domainsLabel}">Domain mapping (one per line — toggle verified in the list)</label>
+        <textarea id="domains" rows="2"
+                  style="width:100%;padding:13px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+    </div>
+
+    <!-- OIDC 필드 -->
+    <div id="oidc-fields">
+        <div class="field"><label for="oidc-issuer" th:text="#{admin.sso.oidc.issuer}">issuer (optional)</label><input type="text" id="oidc-issuer" autocomplete="off"></div>
+        <div class="field"><label for="oidc-auth-uri" th:text="#{admin.sso.oidc.authUri}">authorization_uri</label><input type="text" id="oidc-auth-uri" autocomplete="off"></div>
+        <div class="field"><label for="oidc-token-uri" th:text="#{admin.sso.oidc.tokenUri}">token_uri</label><input type="text" id="oidc-token-uri" autocomplete="off"></div>
+        <div class="field"><label for="oidc-jwks-uri" th:text="#{admin.sso.oidc.jwksUri}">jwks_uri</label><input type="text" id="oidc-jwks-uri" autocomplete="off"></div>
+        <div class="field"><label for="oidc-userinfo-uri" th:text="#{admin.sso.oidc.userInfoUri}">userinfo_uri (optional)</label><input type="text" id="oidc-userinfo-uri" autocomplete="off"></div>
+        <div class="field"><label for="oidc-user-name-attr" th:text="#{admin.sso.oidc.userNameAttr}">user_name_attribute (default sub)</label><input type="text" id="oidc-user-name-attr" autocomplete="off"></div>
+        <div class="field"><label for="oidc-client-id" th:text="#{admin.sso.oidc.clientId}">client_id</label><input type="text" id="oidc-client-id" autocomplete="off"></div>
+        <div class="field"><label for="oidc-client-secret" th:text="#{admin.sso.oidc.clientSecret}">client_secret (leave blank when editing to keep current)</label><input type="password" id="oidc-client-secret" autocomplete="new-password"></div>
+        <div class="field"><label for="oidc-scopes" th:text="#{admin.sso.oidc.scopes}">scopes (comma/space separated — openid added automatically)</label><input type="text" id="oidc-scopes" autocomplete="off"></div>
+    </div>
+
+    <!-- SAML 필드 -->
+    <div id="saml-fields" class="hidden">
+        <div class="field"><label for="saml-idp-entity-id" th:text="#{admin.sso.saml.idpEntityId}">IdP entity_id</label><input type="text" id="saml-idp-entity-id" autocomplete="off"></div>
+        <div class="field"><label for="saml-sso-url" th:text="#{admin.sso.saml.ssoUrl}">IdP SSO URL (Redirect binding)</label><input type="text" id="saml-sso-url" autocomplete="off"></div>
+        <div class="field"><label for="saml-cert" th:text="#{admin.sso.saml.cert}">IdP signature verification certificate (PEM)</label>
+            <textarea id="saml-cert" rows="4"
+                      style="width:100%;padding:13px 15px;font-size:12px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+        </div>
+        <div class="field"><label for="saml-email-attr" th:text="#{admin.sso.saml.emailAttr}">email attribute (default email)</label><input type="text" id="saml-email-attr" autocomplete="off"></div>
+        <div class="field"><label for="saml-name-attr" th:text="#{admin.sso.saml.nameAttr}">name attribute (default name)</label><input type="text" id="saml-name-attr" autocomplete="off"></div>
+        <div class="check-row"><label><input type="checkbox" id="saml-want-authn-signed"> <span th:text="#{admin.sso.saml.wantAuthnSigned}">IdP requires a signed AuthnRequest</span></label></div>
+    </div>
+
+    <div class="actions end" style="gap:12px;">
+        <button type="button" class="btn-secondary hidden" id="cancel-btn" onclick="resetForm()" th:text="#{common.cancel}">Cancel</button>
+        <button type="button" class="btn-primary" id="submit-btn" onclick="submitForm()" th:text="#{admin.sso.submitNew}">Register</button>
+    </div>
+
+    <!-- SP 값(상대 IdP 등록용) — 커넥션 선택 시 표시 -->
+    <div id="sp-panel" class="alert alert-info hidden" style="margin-top:16px;">
+        <div style="font-weight:600;margin-bottom:8px;" th:text="#{admin.sso.spPanel.heading}">SP values — register these with the IdP</div>
+        <div class="hint" id="sp-oidc" style="font-family:monospace;font-size:12px;white-space:pre-line;"></div>
+        <div class="hint" id="sp-saml" style="font-family:monospace;font-size:12px;white-space:pre-line;"></div>
+        <!-- 도메인 검증 토글 -->
+        <div style="margin-top:12px;">
+            <div style="font-weight:600;margin-bottom:6px;" th:text="#{admin.sso.spPanel.domainHeading}">Domain verification</div>
+            <div id="sp-domains"></div>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        active: [[#{admin.sso.js.active}]],
+        inactive: [[#{admin.sso.js.inactive}]],
+        enforced: [[#{admin.sso.js.enforced}]],
+        edit: [[#{admin.sso.js.edit}]],
+        delete: [[#{admin.sso.js.delete}]],
+        formEdit: [[#{admin.sso.js.formEdit}]],
+        save: [[#{admin.sso.js.save}]],
+        formNew: [[#{admin.sso.formNew}]],
+        submitNew: [[#{admin.sso.submitNew}]],
+        updateFailed: [[#{admin.sso.js.updateFailed}]],
+        createFailed: [[#{admin.sso.js.createFailed}]],
+        deleteConfirm: [[#{admin.sso.js.deleteConfirm}]],
+        deleteFailed: [[#{admin.sso.js.deleteFailed}]],
+        domainToggleFailed: [[#{admin.sso.js.domainToggleFailed}]],
+        verified: [[#{admin.sso.js.verified}]],
+        unverified: [[#{admin.sso.js.unverified}]],
+        unverify: [[#{admin.sso.js.unverify}]],
+        verify: [[#{admin.sso.js.verify}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/sso');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(m) { const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); }
+    function clearError() { document.getElementById('error').classList.add('hidden'); }
+    function val(id) { return document.getElementById(id).value.trim(); }
+    function checked(id) { return document.getElementById(id).checked; }
+    function lines(id) { return document.getElementById(id).value.split('\n').map(s => s.trim()).filter(s => s); }
+    function selectedProtocol() { return document.querySelector('input[name="protocol"]:checked').value; }
+
+    let editingId = null;
+    let connections = [];
+
+    function onProtocolChange() {
+        const saml = selectedProtocol() === 'SAML';
+        document.getElementById('saml-fields').classList.toggle('hidden', !saml);
+        document.getElementById('oidc-fields').classList.toggle('hidden', saml);
+    }
+
+    function renderConnections() {
+        const tbody = document.getElementById('conn-list');
+        tbody.innerHTML = '';
+        document.getElementById('conn-empty').classList.toggle('hidden', connections.length > 0);
+        connections.forEach(c => {
+            const tr = document.createElement('tr');
+            const cell = (text, mono) => { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; };
+            tr.appendChild(cell(c.registrationId, true));
+            tr.appendChild(cell(c.displayName));
+            tr.appendChild(cell(c.protocol));
+            tr.appendChild(cell((c.enabled ? I18N.active : I18N.inactive) + (c.enforced ? ' · ' + I18N.enforced : '')));
+            const domTd = cell(c.domains.map(d => d.domain + (d.verified ? '✓' : '')).join('\n'), true);
+            domTd.style.whiteSpace = 'pre-line'; domTd.style.fontSize = '12px';
+            tr.appendChild(domTd);
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button'; editBtn.className = 'link'; editBtn.style.cssText = 'background:none;border:none;margin-right:8px;';
+            editBtn.textContent = I18N.edit; editBtn.onclick = () => startEdit(c);
+            actions.appendChild(editBtn);
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button'; delBtn.className = 'link'; delBtn.style.cssText = 'background:none;border:none;';
+            delBtn.textContent = I18N.delete; delBtn.onclick = () => deleteConnection(c);
+            actions.appendChild(delBtn);
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadConnections() {
+        const {ok, data} = await api('GET', '/api/admin/sso');
+        if (!ok) return;
+        connections = data;
+        renderConnections();
+    }
+
+    function setImmutable(disabled) {
+        document.getElementById('registration-id').disabled = disabled;
+        document.querySelectorAll('input[name="protocol"]').forEach(el => el.disabled = disabled);
+    }
+
+    function startEdit(c) {
+        clearError();
+        editingId = c.id;
+        document.getElementById('form-title').textContent = I18N.formEdit.replace('{0}', c.registrationId);
+        document.getElementById('submit-btn').textContent = I18N.save;
+        document.getElementById('cancel-btn').classList.remove('hidden');
+        document.getElementById('registration-id').value = c.registrationId;
+        document.getElementById('display-name').value = c.displayName;
+        document.querySelector('input[name="protocol"][value="' + c.protocol + '"]').checked = true;
+        document.getElementById('enabled').checked = c.enabled;
+        document.getElementById('enforced').checked = c.enforced;
+        document.getElementById('trust-idp-mfa').checked = c.trustIdpMfa;
+        document.getElementById('domains').value = c.domains.map(d => d.domain).join('\n');
+        document.getElementById('oidc-issuer').value = c.oidcIssuer || '';
+        document.getElementById('oidc-auth-uri').value = c.oidcAuthorizationUri || '';
+        document.getElementById('oidc-token-uri').value = c.oidcTokenUri || '';
+        document.getElementById('oidc-jwks-uri').value = c.oidcJwksUri || '';
+        document.getElementById('oidc-userinfo-uri').value = c.oidcUserInfoUri || '';
+        document.getElementById('oidc-user-name-attr').value = c.oidcUserNameAttr || '';
+        document.getElementById('oidc-client-id').value = c.oidcClientId || '';
+        document.getElementById('oidc-client-secret').value = '';
+        document.getElementById('oidc-scopes').value = c.oidcScopes || '';
+        document.getElementById('saml-idp-entity-id').value = c.samlIdpEntityId || '';
+        document.getElementById('saml-sso-url').value = c.samlSsoUrl || '';
+        document.getElementById('saml-cert').value = c.samlVerificationCert || '';
+        document.getElementById('saml-email-attr').value = c.samlEmailAttr || '';
+        document.getElementById('saml-name-attr').value = c.samlNameAttr || '';
+        document.getElementById('saml-want-authn-signed').checked = c.samlWantAuthnSigned;
+        onProtocolChange();
+        setImmutable(true);
+        renderSpPanel(c);
+        window.scrollTo({top: 0});
+    }
+
+    function renderSpPanel(c) {
+        const panel = document.getElementById('sp-panel');
+        panel.classList.remove('hidden');
+        if (c.protocol === 'SAML') {
+            document.getElementById('sp-saml').textContent =
+                'SP entity_id: ' + c.spEntityId + '\nACS URL: ' + c.spAcsUrl + '\nSP metadata: ' + c.spMetadataUrl;
+            document.getElementById('sp-oidc').textContent = '';
+        } else {
+            document.getElementById('sp-oidc').textContent = 'redirect_uri: ' + c.oidcRedirectUri;
+            document.getElementById('sp-saml').textContent = '';
+        }
+        const domBox = document.getElementById('sp-domains');
+        domBox.innerHTML = '';
+        c.domains.forEach(d => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;margin:4px 0;';
+            const label = document.createElement('span');
+            label.style.fontFamily = 'monospace'; label.textContent = d.domain + (d.verified ? ' (' + I18N.verified + ')' : ' (' + I18N.unverified + ')');
+            const btn = document.createElement('button');
+            btn.type = 'button'; btn.className = 'link'; btn.style.cssText = 'background:none;border:none;';
+            btn.textContent = d.verified ? I18N.unverify : I18N.verify;
+            btn.onclick = () => toggleDomain(c.id, d.domain, !d.verified);
+            row.appendChild(label); row.appendChild(btn);
+            domBox.appendChild(row);
+        });
+    }
+
+    function resetForm() {
+        editingId = null;
+        document.getElementById('form-title').textContent = I18N.formNew;
+        document.getElementById('submit-btn').textContent = I18N.submitNew;
+        document.getElementById('cancel-btn').classList.add('hidden');
+        ['registration-id','display-name','domains','oidc-issuer','oidc-auth-uri','oidc-token-uri','oidc-jwks-uri',
+         'oidc-userinfo-uri','oidc-user-name-attr','oidc-client-id','oidc-client-secret','oidc-scopes',
+         'saml-idp-entity-id','saml-sso-url','saml-cert','saml-email-attr','saml-name-attr'].forEach(id => document.getElementById(id).value = '');
+        document.querySelector('input[name="protocol"][value="OIDC"]').checked = true;
+        document.getElementById('enabled').checked = true;
+        document.getElementById('enforced').checked = true;
+        document.getElementById('trust-idp-mfa').checked = false;
+        document.getElementById('saml-want-authn-signed').checked = false;
+        onProtocolChange();
+        setImmutable(false);
+        document.getElementById('sp-panel').classList.add('hidden');
+    }
+
+    function buildPayload() {
+        return {
+            registrationId: val('registration-id'),
+            displayName: val('display-name'),
+            protocol: selectedProtocol(),
+            enabled: checked('enabled'),
+            enforced: checked('enforced'),
+            trustIdpMfa: checked('trust-idp-mfa'),
+            domains: lines('domains'),
+            oidcIssuer: val('oidc-issuer'),
+            oidcAuthorizationUri: val('oidc-auth-uri'),
+            oidcTokenUri: val('oidc-token-uri'),
+            oidcJwksUri: val('oidc-jwks-uri'),
+            oidcUserInfoUri: val('oidc-userinfo-uri'),
+            oidcUserNameAttr: val('oidc-user-name-attr'),
+            oidcClientId: val('oidc-client-id'),
+            oidcClientSecret: val('oidc-client-secret'),
+            oidcScopes: val('oidc-scopes'),
+            samlIdpEntityId: val('saml-idp-entity-id'),
+            samlSsoUrl: val('saml-sso-url'),
+            samlVerificationCert: val('saml-cert'),
+            samlWantAuthnSigned: checked('saml-want-authn-signed'),
+            samlEmailAttr: val('saml-email-attr'),
+            samlNameAttr: val('saml-name-attr'),
+        };
+    }
+
+    async function submitForm() {
+        clearError();
+        const payload = buildPayload();
+        if (editingId) {
+            const {ok, data} = await api('PUT', '/api/admin/sso/' + encodeURIComponent(editingId), payload);
+            if (!ok) { showError(data.message || I18N.updateFailed); return; }
+        } else {
+            const {ok, data} = await api('POST', '/api/admin/sso', payload);
+            if (!ok) { showError(data.message || I18N.createFailed); return; }
+        }
+        resetForm();
+        loadConnections();
+    }
+
+    async function deleteConnection(c) {
+        clearError();
+        if (!confirm(I18N.deleteConfirm.replace('{0}', c.registrationId))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/sso/' + encodeURIComponent(c.id));
+        if (!ok) { showError(data.message || I18N.deleteFailed); return; }
+        if (editingId === c.id) resetForm();
+        loadConnections();
+    }
+
+    async function toggleDomain(id, domain, verified) {
+        clearError();
+        const {ok, data} = await api('POST', '/api/admin/sso/' + encodeURIComponent(id) + '/domain/verify', {domain, verified});
+        if (!ok) { showError(data.message || I18N.domainToggleFailed); return; }
+        connections = connections.map(c => c.id === id ? data : c);
+        renderConnections();
+        renderSpPanel(data);
+    }
+
+    loadConnections();
+</script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * taspa 디자인 토큰 — **팔레트의 단일 출처**.
+ *
+ * 서버 렌더링 인증 화면(static/css/auth.css)의 색을 그대로 이어받는다. 사용자는 로그인(서버 렌더링) →
+ * 콘솔(SPA) 사이를 리다이렉트로 오가므로, 두 화면이 다른 제품처럼 보이면 안 된다.
+ * 아래에서 shadcn 의 시맨틱 토큰(--primary·--background 등)을 이 팔레트로 파생시킨다.
+ */
+/*
+ * ★**팔레트는 한 곳에만 쓴다** — `light-dark()` 로 라이트/다크 값을 한 줄에 함께 둔다.
+ *
+ * 예전 구조는 같은 토큰 목록을 세 번(`:root`, `.dark`, `@media (prefers-color-scheme: dark)`) 반복했다.
+ * 그 상태에서 새 토큰을 `.dark` 에만 추가했다가 **다크에서 전혀 적용되지 않는** 일이 실제로 있었다 —
+ * 이 앱에는 테마 토글이 없어서 `.dark` 클래스를 붙이는 코드가 어디에도 없고(살아 있는 경로는 미디어
+ * 쿼리 하나뿐), 세 블록 중 어느 것이 진짜인지 코드만 봐서는 알 수 없었다.
+ *
+ * `light-dark()` 는 `color-scheme` 을 보고 고른다. 그래서 아래 세 줄이 규칙의 전부다:
+ *   - 기본은 OS 선호(`light dark`)
+ *   - `.light`/`.dark` 클래스는 그 위에서 강제(향후 토글을 붙일 때 팔레트를 건드릴 필요가 없다)
+ */
+:root {
+  color-scheme: light dark;
+}
+:root.light,
+:root:has(.light) {
+  color-scheme: light;
+}
+:root.dark,
+:root:has(.dark) {
+  color-scheme: dark;
+}
+
+:root {
+  /* 브랜드 */
+  --taspa-blue: light-dark(#1a73e8, #8ab4f8);
+  --taspa-blue-hover: light-dark(#1b66c9, #a5c6fa);
+  --taspa-blue-soft: light-dark(#e8f0fe, #1f2a3d);
+
+  /* 중립 — 파랑 쪽으로 아주 살짝 기울인 회색(순수 회색은 무성의해 보인다) */
+  --taspa-ink: light-dark(#202124, #e8eaed);
+  --taspa-muted: light-dark(#5f6368, #9aa0a6);
+  --taspa-faint: light-dark(#80868b, #80868b);
+  --taspa-border: light-dark(#dadce0, #3c4043);
+  --taspa-line: light-dark(#ecedef, #2a2d31);
+  --taspa-surface: light-dark(#ffffff, #1f2023);
+  --taspa-canvas: light-dark(#f8f9fb, #17181a);
+  /*
+   * ★표면은 **3단**이다. 그전에는 canvas 와 surface 둘뿐이라, 카드 안에 또 카드를 넣는 자리
+   * (통계 타일·요약 박스)가 배경이 같아 테두리로만 구분됐다 — 화면이 "전부 같은 흰 상자"로 보인
+   * 가장 큰 원인이다. 안쪽 영역은 **파인다**(sunken): 바탕에서 한 단 내려가야 그 위의 숫자가 뜬다
+   * (다크에서도 방향은 같다 — 더 어둡게).
+   */
+  --taspa-sunken: light-dark(#f4f6f8, #191a1d);
+  /* 강조 카드(그 화면에서 유일하게 행동을 요구하는 것)만 한 단 띄운다. 다크에서는 밝기로 띄운다. */
+  --taspa-raised: light-dark(#ffffff, #26282c);
+
+  /*
+   * 그림자 — 지금까지 **하나도 없었다**(카드가 1px ring 만 가졌다). 그래서 섹션 8개가 같은 평면에
+   * 놓여 위계가 생기지 않았다. 값은 아주 얕게: B2B 콘솔에서 두꺼운 그림자는 촌스럽고, 종이 한 장
+   * 들린 정도면 "이건 묶인 덩어리"라는 신호로 충분하다.
+   * ★다크에서는 그림자가 거의 읽히지 않으므로(검정 위의 검정) 값을 줄이고, 위계는 표면 밝기가 진다.
+   * ★그림자는 **단층으로 쓴다**(콤마 없이). `light-dark()` 는 콤마를 인자 구분자로 파싱하므로
+   *   다층 그림자(`a, b`)를 넣으면 값이 통째로 깨진다 — 조용히 무효가 되는 종류라 눈치채기 어렵다.
+   */
+  --taspa-shadow-card: light-dark(0 1px 3px 0 rgb(16 24 40 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.3));
+  --taspa-shadow-raised: light-dark(0 8px 20px -6px rgb(16 24 40 / 0.12), 0 2px 8px -2px rgb(0 0 0 / 0.45));
+  --taspa-shadow-overlay: light-dark(
+    0 12px 32px -8px rgb(16 24 40 / 0.18),
+    0 12px 32px -8px rgb(0 0 0 / 0.6)
+  );
+
+  /*
+   * 의미색 — 브랜드 파랑과 구분되는 상태 표현.
+   *
+   * ★라이트 값은 **soft 배경 위에서 4.5:1** 을 넘어야 한다. 이 색들은 거의 언제나 자기 soft 배경과
+   * 짝지어 쓰이는데(`StatusLine`·배지·경고 줄), 예전 값은 그 조합에서 success 3.70:1 / warning 4.34:1 로
+   * AA 미달이었다 — 다크는 7.69 / 10.95 로 넉넉해서 **라이트에서만** 문장이 배경에 녹았다.
+   * "계산대 앞에서 가장 먼저 확인해야 하는 사실"을 띄우려고 만든 줄이 정작 밝은 환경에서 안 읽히는 셈.
+   * 회귀: `components/data-display.contrast.test.ts` 가 이 조합들의 대비를 고정한다.
+   */
+  --taspa-danger: light-dark(#c5221f, #f28b82);
+  --taspa-danger-soft: light-dark(#fce8e6, #2d1a18);
+  --taspa-success: light-dark(#137333, #81c995);
+  --taspa-success-soft: light-dark(#e6f4ea, #1a2a1e);
+  --taspa-warning: light-dark(#8a4b00, #fdd663);
+  --taspa-warning-soft: light-dark(#fef7e0, #2b2417);
+
+  /* ── shadcn 시맨틱 토큰(위 팔레트에서 파생) ───────────────────────── */
+  --background: var(--taspa-canvas);
+  --foreground: var(--taspa-ink);
+  --card: var(--taspa-surface);
+  --card-foreground: var(--taspa-ink);
+  --popover: var(--taspa-surface);
+  --popover-foreground: var(--taspa-ink);
+  --primary: var(--taspa-blue);
+  /*
+   * ★버튼 글자색은 배경 파랑과 **함께** 뒤집힌다. 다크의 브랜드 파랑은 밝은 하늘색(#8ab4f8)이라
+   * 그 위에 흰 글씨를 두면 대비가 무너진다 — 어두운 글자여야 읽힌다.
+   */
+  --primary-foreground: light-dark(#ffffff, #17181a);
+  /*
+   * ★`--secondary` 는 `--card` 와 **달라야** 한다. 같은 값(taspa-surface)이던 동안
+   * `Badge variant="secondary"` 가 카드 위에서 배경이 없어 **그냥 굵은 본문 텍스트로** 보였다 —
+   * '기본값 사용 중'·'검증됨' 같은 상태 칩이 칩으로 안 읽혔다. 라이트/다크 모두 이미 정의된
+   * `taspa-line` 을 쓰면 두 테마에서 한 번에 해결된다.
+   */
+  --secondary: var(--taspa-line);
+  --secondary-foreground: var(--taspa-ink);
+  --muted: var(--taspa-line);
+  --muted-foreground: var(--taspa-muted);
+  --accent: var(--taspa-blue-soft);
+  /*
+   * ★accent 전경은 브랜드 파랑과 **분리한다**. 라이트에서 `--taspa-blue`(#1a73e8)를 그대로 쓰면
+   * soft 배경(#e8f0fe) 위에서 3.93:1 로 AA 미달인데, 이 조합이 하필 **주 네비게이션의 활성 항목**과
+   * 모든 메뉴 focus 상태다(14px semibold — large text 완화 대상도 아니다).
+   * 배경을 어둡게 하면 그 위 아이콘까지 영향을 받으므로 **전경만** 내린다. 다크는 6.84:1 로 충분해 그대로.
+   */
+  --accent-foreground: light-dark(#174ea6, var(--taspa-blue));
+  --destructive: var(--taspa-danger);
+  --border: var(--taspa-border);
+  /*
+   * ★입력 경계는 카드 테두리와 **요구 수준이 다르다**. 카드 테두리는 장식이지만 입력 경계는
+   * "여기에 쓸 수 있다"는 **컴포넌트 식별**이라 WCAG 1.4.11(비텍스트 대비) 3:1 이 필요하다.
+   * 같은 값을 공유하던 동안 라이트 1.37:1 / 다크 1.56:1 로 둘 다 한참 미달이었다 —
+   * 폼이 많은 관리·조직 콘솔에서 입력칸의 경계가 사실상 안 보였다.
+   */
+  --input: light-dark(#9aa0a6, #5f6368);
+  --ring: var(--taspa-blue);
+
+  /* 차트 — 브랜드 파랑에서 출발해 채도를 낮춰가는 계열(임의 색 나열 금지).
+     다크에서는 같은 계열을 밝은 쪽으로 옮긴다(라이트 값 그대로 두면 어두운 바탕에서 뒤 3개가 묻힌다). */
+  --chart-1: var(--taspa-blue);
+  --chart-2: light-dark(#4a90d9, #6fa8dc);
+  --chart-3: light-dark(#7aa9c9, #8fb9cf);
+  --chart-4: light-dark(#a3c0d4, #a7c3d6);
+  --chart-5: light-dark(#c9d6de, #bfcdd6);
+
+  --radius: 0.625rem;
+
+  --sidebar: var(--taspa-surface);
+  --sidebar-foreground: var(--taspa-ink);
+  --sidebar-primary: var(--taspa-blue);
+  --sidebar-primary-foreground: light-dark(#ffffff, #17181a);
+  --sidebar-accent: var(--taspa-blue-soft);
+  --sidebar-accent-foreground: var(--taspa-blue);
+  --sidebar-border: var(--taspa-border);
+  --sidebar-ring: var(--taspa-blue);
+}
+
+@theme inline {
+  /* taspa 고유 유틸리티(shadcn 토큰으로 표현되지 않는 것들) */
+  --color-brand: var(--taspa-blue);
+  --color-brand-hover: var(--taspa-blue-hover);
+  --color-brand-soft: var(--taspa-blue-soft);
+  --color-ink: var(--taspa-ink);
+  --color-faint: var(--taspa-faint);
+  --color-line: var(--taspa-line);
+  --color-surface: var(--taspa-surface);
+  --color-canvas: var(--taspa-canvas);
+  --color-danger: var(--taspa-danger);
+  --color-danger-soft: var(--taspa-danger-soft);
+  --color-success: var(--taspa-success);
+  --color-success-soft: var(--taspa-success-soft);
+  --color-warning: var(--taspa-warning);
+  --color-warning-soft: var(--taspa-warning-soft);
+  --color-sunken: var(--taspa-sunken);
+  --color-raised: var(--taspa-raised);
+
+  /* 그림자 — `shadow-card`·`shadow-raised`·`shadow-overlay` 유틸리티로 쓴다. */
+  --shadow-card: var(--taspa-shadow-card);
+  --shadow-raised: var(--taspa-shadow-raised);
+  --shadow-overlay: var(--taspa-shadow-overlay);
+
+  /*
+   * ── 타이포 스케일 ────────────────────────────────────────────────────────
+   *
+   * 그전에는 화면의 거의 모든 글자가 14~20px 안에 몰려 있었다. 대시보드인데 **숫자가 서지 않았고**,
+   * 섹션 제목과 본문이 굵기로만 갈려서 스캔이 안 됐다. 아래 네 단이 그 간격을 만든다.
+   *
+   * ★자간(`letter-spacing`)은 **숫자·라벨에만** 준다. 한글은 라틴처럼 조이면 자소가 붙어 읽기 나빠진다.
+   */
+
+  /* 페이지 제목. 화면당 하나. */
+  --text-display: 1.5rem;
+  --text-display--line-height: 1.3;
+  --text-display--font-weight: 650;
+  --text-display--letter-spacing: -0.01em;
+
+  /* 대시보드 숫자. 이 스케일의 존재 이유 — 값이 라벨보다 압도적으로 커야 한눈에 읽힌다. */
+  --text-metric: 1.75rem;
+  --text-metric--line-height: 1.1;
+  --text-metric--font-weight: 600;
+  --text-metric--letter-spacing: -0.02em;
+
+  /* 좁은 칸(타일 4열·모바일)의 숫자. */
+  --text-metric-sm: 1.25rem;
+  --text-metric-sm--line-height: 1.2;
+  --text-metric-sm--font-weight: 600;
+  --text-metric-sm--letter-spacing: -0.015em;
+
+  /* 섹션 제목. */
+  --text-title: 0.9375rem;
+  --text-title--line-height: 1.4;
+  --text-title--font-weight: 600;
+
+  /* 라벨·표 헤더. 작고 조용하되 자간으로 '라벨임'을 드러낸다. */
+  --text-label: 0.75rem;
+  --text-label--line-height: 1.4;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: 0.02em;
+
+  /* 본문은 Geist(라틴) + 한글은 시스템 폰트로 자연스럽게 폴백시킨다.
+     Geist 에는 한글 글리프가 없어, 폴백을 명시하지 않으면 브라우저 기본 한글 폰트가 제각각으로 잡힌다. */
+  --font-sans:
+    var(--font-geist), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo",
+    "Malgun Gothic", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-heading: var(--font-sans);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /*
+     * ★한글은 **어절 단위**로 끊는다.
+     *
+     * CSS 기본값(`word-break: normal`)은 한글을 **글자 단위**로 끊는다. 그래서 좁은 칸에서
+     * "오후 07:44" 가 "오 / 후 07:44" 로, "계산하지 않습니다" 가 "않 / 습니다" 로 갈라졌다 —
+     * 조직 개요·식권 화면의 설명 문장 대부분이 그 상태였고, 읽을 수는 있어서 오래 안 보였다.
+     * `keep-all` 이 한국어 조판의 기본이다.
+     *
+     * 대신 끊을 자리가 없는 긴 토큰(이메일·UUID·URL)은 `keep-all` 만으로는 칸을 넘치므로,
+     * **그때만** 끊도록 `break-word` 를 함께 둔다(`anywhere` 와 달리 min-content 폭을 바꾸지 않아
+     * 표 레이아웃이 흔들리지 않는다).
+     */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+  html {
+    @apply font-sans;
+    /*
+     * ★고정 헤더 높이만큼 스크롤 여유를 둔다.
+     *
+     * 헤더가 sticky 가 된 뒤로 `scrollIntoView`·앵커 이동이 대상을 화면 맨 위에 놓으면 **헤더 아래로
+     * 들어가 가려진다** — 관리 콘솔의 "상세" 패널이 그렇게 열려서, 눌러도 제목과 닫기 버튼이 안 보였다.
+     * 개별 요소마다 `scroll-mt-*` 를 붙이면 반드시 빠뜨리는 곳이 생기므로 여기서 한 번에 정한다
+     * (모바일은 헤더가 두 줄이라 더 높다 — 넉넉한 쪽에 맞춘다).
+     */
+    scroll-padding-top: 7rem;
+  }
+}
+
+/*
+ * ★**반드시 `@layer components` 안에 둔다.**
+ *
+ * CSS 캐스케이드에서 **레이어 밖(unlayered) 선언은 모든 레이어를 이긴다** — 특이도나 소스 순서와
+ * 무관하게. 그래서 이 규칙들이 레이어 밖에 있던 동안, 같은 요소에 붙은 Tailwind 유틸리티
+ * (`@layer utilities`)가 전부 졌다. 실제 피해:
+ *
+ *   `surface-raised … hover:border-primary`  → hover 테두리가 **전혀 걸리지 않음**
+ *                                              (홈에서 유일하게 띄운 진입점의 hover 피드백이 죽었다)
+ *   `surface-sunken bg-card`                 → bg-card 무시
+ *   `surface-card shadow-raised`             → shadow-raised 무시
+ *
+ * 눈으로도 게이트로도 안 잡히는 종류다: 정적 캡처는 :hover 를 찍지 않고, tsc·eslint·prettier 는
+ * 캐스케이드를 보지 않는다. components 레이어에 넣으면 utilities 가 정상적으로 이긴다.
+ */
+@layer components {
+  /* 숫자가 열로 정렬되는 표·금액 표시에서 자릿수가 흔들리지 않게 한다. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * 표면 위계. `bg-*` 만으로는 "이 상자가 위인지 아래인지"를 매번 손으로 조합하게 되고,
+   * 그러다 화면마다 조금씩 달라진다(카드 안 타일이 어떤 곳은 테두리, 어떤 곳은 회색 배경이었다).
+   * 세 클래스로 고정한다 — 위계를 바꾸려면 여기만 고친다.
+   */
+  .surface-card {
+    background-color: var(--taspa-surface);
+    box-shadow: var(--taspa-shadow-card);
+    border: 1px solid var(--taspa-line);
+  }
+  /* 카드 안에서 한 단 파인 자리(통계 타일·요약 박스). 테두리를 주지 않는다 — 배경 차이로 이미 읽힌다. */
+  .surface-sunken {
+    background-color: var(--taspa-sunken);
+  }
+  /* 파인 면 위의 막대 트랙은 한 단 더 눌러야 보인다 — 같은 색이면 0% 막대가 아예 사라진다. */
+  .surface-sunken .progress-track {
+    background-color: var(--taspa-border);
+  }
+  /* 그 화면에서 유일하게 행동을 요구하는 덩어리. 화면당 하나를 넘기지 말 것(둘이면 강조가 사라진다). */
+  .surface-raised {
+    background-color: var(--taspa-raised);
+    box-shadow: var(--taspa-shadow-raised);
+    border: 1px solid var(--taspa-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

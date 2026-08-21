@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.audit.title}">Audit log · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" class="active" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="field" style="flex:1; min-width:200px; margin-bottom:16px;">
+            <label for="filter-type" th:text="#{admin.audit.filterType}">Event type (exact match)</label>
+            <input type="text" id="filter-type" autocomplete="off" placeholder="LOGIN_FAILURE">
+        </div>
+        <div class="field" style="flex:1; min-width:200px; margin-bottom:16px;">
+            <label for="filter-email" th:text="#{admin.audit.filterEmail}">Email (exact match)</label>
+            <input type="text" id="filter-email" autocomplete="off" placeholder="user@example.com">
+        </div>
+        <div class="field" style="width:110px; margin-bottom:16px;">
+            <label for="filter-limit" th:text="#{admin.audit.filterLimit}">Show count</label>
+            <select id="filter-limit"
+                    style="width:100%;padding:13px 10px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;">
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:16px;">
+            <button type="button" class="btn-primary" onclick="applyFilter()" th:text="#{admin.audit.search}">Search</button>
+        </div>
+    </div>
+
+    <div id="audit-empty" class="hint hidden" th:text="#{admin.emptyEvents}">No audit events</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.col.time}">Time</th>
+                <th th:text="#{admin.col.type}">Type</th>
+                <th th:text="#{admin.col.user}">User</th>
+                <th th:text="#{admin.col.detail}">Details</th>
+            </tr>
+            </thead>
+            <tbody id="audit-list"></tbody>
+        </table>
+    </div>
+
+    <div class="actions" style="margin-top:16px;">
+        <button type="button" class="btn-secondary" id="prev-btn" onclick="prevPage()" disabled th:text="#{admin.audit.prev}">Previous</button>
+        <span class="hint" style="margin:0;" id="page-info"></span>
+        <button type="button" class="btn-secondary" id="next-btn" onclick="nextPage()" th:text="#{admin.audit.next}">Next</button>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = { auditLoadFailed: [[#{admin.audit.js.loadFailed}]] };
+</script>
+<script>
+    let offset = 0;
+    let lastCount = 0;
+
+    function limit() {
+        return parseInt(document.getElementById('filter-limit').value, 10);
+    }
+
+    async function loadAudit() {
+        const params = new URLSearchParams();
+        const type = document.getElementById('filter-type').value.trim();
+        const email = document.getElementById('filter-email').value.trim();
+        if (type) params.set('type', type);
+        if (email) params.set('email', email);
+        params.set('limit', String(limit()));
+        params.set('offset', String(offset));
+
+        const res = await fetch('/api/admin/audit?' + params.toString(), {credentials: 'same-origin'});
+        if (!res.ok) {
+            const el = document.getElementById('error');
+            el.textContent = I18N.auditLoadFailed;
+            el.classList.remove('hidden');
+            return;
+        }
+        document.getElementById('error').classList.add('hidden');
+        const events = await res.json();
+        lastCount = events.length;
+
+        const tbody = document.getElementById('audit-list');
+        tbody.innerHTML = '';
+        document.getElementById('audit-empty').classList.toggle('hidden', events.length > 0);
+        events.forEach(e => {
+            const tr = document.createElement('tr');
+            const timeTd = document.createElement('td');
+            timeTd.style.whiteSpace = 'nowrap';
+            timeTd.textContent = new Date(e.createdAt).toLocaleString();
+            const typeTd = document.createElement('td');
+            typeTd.textContent = e.type;
+            const userTd = document.createElement('td');
+            userTd.textContent = e.email || (e.userId || '-');
+            const detailTd = document.createElement('td');
+            detailTd.className = 'detail-cell';
+            detailTd.textContent = e.detail || '';
+            tr.appendChild(timeTd);
+            tr.appendChild(typeTd);
+            tr.appendChild(userTd);
+            tr.appendChild(detailTd);
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('prev-btn').disabled = offset === 0;
+        // 마지막 페이지 추정: 받은 개수가 limit 미만이면 다음 페이지 없음.
+        document.getElementById('next-btn').disabled = events.length < limit();
+        document.getElementById('page-info').textContent =
+            events.length ? (offset + 1) + ' – ' + (offset + events.length) : '';
+    }
+
+    function applyFilter() {
+        offset = 0;
+        loadAudit();
+    }
+
+    function prevPage() {
+        offset = Math.max(0, offset - limit());
+        loadAudit();
+    }
+
+    function nextPage() {
+        if (lastCount < limit()) return;
+        offset += limit();
+        loadAudit();
+    }
+
+    document.getElementById('filter-type').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFilter(); });
+    document.getElementById('filter-email').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFilter(); });
+    loadAudit();
+</script>
+</body>
+</html>

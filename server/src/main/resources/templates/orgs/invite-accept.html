@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{invite.accept.title}">Organization invitation · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{invite.accept.heading}">Organization invitation</h1>
+    <p class="auth-subtitle" th:text="#{invite.accept.subtitle}">You have been invited to the organization below.</p>
+
+    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+    <!-- 초대 정보 -->
+    <div th:if="${state != 'INVALID'}" class="info-list" style="margin-top:8px;">
+        <div class="field">
+            <label th:text="#{invite.accept.orgLabel}">Organization</label>
+            <div th:text="${orgName}">Acme</div>
+        </div>
+        <div class="field">
+            <label th:text="#{invite.accept.roleLabel}">Role</label>
+            <div th:text="${role == 'ORG_ADMIN'} ? #{invite.accept.role.orgAdmin} : #{invite.accept.role.member}">Member</div>
+        </div>
+        <div class="field">
+            <label th:text="#{invite.accept.invitedEmailLabel}">Invited email</label>
+            <div th:text="${invitedEmail}">invitee@example.com</div>
+        </div>
+        <div class="field">
+            <label th:text="#{invite.accept.accountLabel}">Signed in as</label>
+            <div class="email-chip">
+                <span class="dot" th:text="${#strings.substring(userEmail,0,1)}">u</span>
+                <span th:text="${userEmail}">user@example.com</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상태별 안내 -->
+    <div th:if="${state == 'MISMATCH'}" class="alert alert-error" th:text="#{invite.accept.mismatch}">Different account.</div>
+    <div th:if="${state == 'UNVERIFIED'}" class="alert alert-error" th:text="#{invite.accept.unverified}">Verify your email first.</div>
+    <div th:if="${state == 'EXPIRED'}" class="alert alert-error" th:text="#{invite.accept.expired}">Expired.</div>
+    <div th:if="${state == 'ORG_INACTIVE'}" class="alert alert-error" th:text="#{invite.accept.orgInactive}">Organization inactive.</div>
+    <div th:if="${state == 'INVALID'}" class="alert alert-error" th:text="#{invite.accept.invalid}">Invalid.</div>
+    <div th:if="${state == 'ACCEPTED'}" class="alert" th:text="#{invite.accept.alreadyAccepted}">Already accepted.</div>
+
+    <!-- 수락 폼: 이메일 일치 + 인증 완료(canAccept) 일 때만 노출한다. -->
+    <form th:if="${canAccept}" method="post" action="/orgs/invite/accept">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <input type="hidden" name="token" th:value="${token}">
+        <div class="actions end">
+            <button type="submit" class="btn-primary" th:text="#{invite.accept.button}">Accept invitation</button>
+        </div>
+    </form>
+
+    <!--
+      ★MISMATCH 에는 **수단**을 함께 준다. "초대받은 계정으로 로그인하세요"라고만 말하면 사용자는
+      스스로 로그아웃 경로를 찾아야 하는데, 이 화면에는 그 링크가 없었다 — 안내가 요구하는 행동을
+      화면이 지원하지 않으면 그건 막다른 길이다.
+      ★continue 파라미터는 싣지 않는다 — /logout 은 그 값을 읽지 않으므로(적대 리뷰에서 확인)
+      약속하지 않은 동작을 링크에 적으면 안 된다. 대신 문구가 "메일의 초대 링크를 다시 열라"고 말한다.
+    -->
+    <div class="stack-links">
+        <a class="link" th:if="${state == 'MISMATCH'}" href="/logout"
+           th:text="#{invite.accept.switchAccount}">Sign in with a different account</a>
+        <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+    </div>
+</main>
+</body>
+</html>

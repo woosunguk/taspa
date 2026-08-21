@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.users.title}">User management · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" class="active" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <div class="field" style="margin-top:8px;">
+        <label for="search-query" th:text="#{admin.users.searchLabel}">Search email (partial match, up to 50)</label>
+        <input type="text" id="search-query" autocomplete="off" placeholder="@example.com">
+    </div>
+    <div class="actions end" style="margin-top:0;">
+        <button type="button" class="btn-primary" onclick="loadUsers()" th:text="#{admin.users.search}">Search</button>
+    </div>
+
+    <div id="user-empty" class="hint hidden" th:text="#{admin.users.empty}">No matching users</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{common.email}">Email</th>
+                <th th:text="#{common.name}">Name</th>
+                <th th:text="#{admin.users.col.status}">Status</th>
+                <th th:text="#{admin.users.col.role}">Role</th>
+                <th>MFA</th>
+                <th th:text="#{admin.users.col.joined}">Joined</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="user-list"></tbody>
+        </table>
+    </div>
+
+    <div id="user-detail" class="hidden">
+        <hr class="divider">
+        <h2 class="auth-title" style="font-size:18px;" id="detail-title" th:text="#{admin.users.detailHeading}">User details</h2>
+        <div id="detail-rows"></div>
+
+        <div class="actions end" style="gap:12px; flex-wrap:wrap;">
+            <button type="button" class="btn-secondary" id="revoke-sessions-btn" th:text="#{admin.users.revokeSessions}">End all sessions</button>
+            <button type="button" class="btn-secondary" id="role-btn"></button>
+            <button type="button" class="btn-primary" id="suspend-btn"></button>
+        </div>
+
+        <h3 class="auth-title" style="font-size:16px; margin-top:24px;" th:text="#{admin.recentEvents}">Recent audit events</h3>
+        <div id="detail-audit-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.emptyEvents}">No audit events</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr>
+                    <th th:text="#{admin.col.time}">Time</th>
+                    <th th:text="#{admin.col.type}">Type</th>
+                    <th th:text="#{admin.col.detail}">Details</th>
+                </tr></thead>
+                <tbody id="detail-audit"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        mfaOn: [[#{admin.users.js.mfaOn}]],
+        detail: [[#{admin.users.js.detail}]],
+        loadFailed: [[#{admin.users.js.loadFailed}]],
+        detailTitle: [[#{admin.users.js.detailTitle}]],
+        rowName: [[#{admin.users.js.rowName}]],
+        rowStatus: [[#{admin.users.js.rowStatus}]],
+        rowRole: [[#{admin.users.js.rowRole}]],
+        rowEmailVerify: [[#{admin.users.js.rowEmailVerify}]],
+        rowMfa: [[#{admin.users.js.rowMfa}]],
+        rowPasskey: [[#{admin.users.js.rowPasskey}]],
+        rowFederated: [[#{admin.users.js.rowFederated}]],
+        rowSessions: [[#{admin.users.js.rowSessions}]],
+        rowJoined: [[#{admin.users.js.rowJoined}]],
+        verified: [[#{admin.users.js.verified}]],
+        unverified: [[#{admin.users.js.unverified}]],
+        mfaEnabled: [[#{admin.users.js.mfaEnabled}]],
+        mfaDisabled: [[#{admin.users.js.mfaDisabled}]],
+        countSuffix: [[#{admin.users.js.countSuffix}]],
+        unsuspend: [[#{admin.users.js.unsuspend}]],
+        unsuspendConfirm: [[#{admin.users.js.unsuspendConfirm}]],
+        suspend: [[#{admin.users.js.suspend}]],
+        suspendConfirm: [[#{admin.users.js.suspendConfirm}]],
+        revokeAdmin: [[#{admin.users.js.revokeAdmin}]],
+        revokeAdminConfirm: [[#{admin.users.js.revokeAdminConfirm}]],
+        grantAdmin: [[#{admin.users.js.grantAdmin}]],
+        grantAdminConfirm: [[#{admin.users.js.grantAdminConfirm}]],
+        revokeSessionsConfirm: [[#{admin.users.js.revokeSessionsConfirm}]],
+        actionFailed: [[#{admin.users.js.actionFailed}]],
+        roleChangeFailed: [[#{admin.users.js.roleChangeFailed}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    // /api/admin/** 는 CSRF 면제 대상이 아니다 — 모든 변경 요청에 X-CSRF-TOKEN 헤더를 싣는다.
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/users');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(message) {
+        const el = document.getElementById('error');
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+
+    function clearError() {
+        document.getElementById('error').classList.add('hidden');
+    }
+
+    function formatDateTime(value) {
+        return value ? new Date(value).toLocaleString() : '-';
+    }
+
+    let selectedUserId = null;
+
+    async function loadUsers() {
+        clearError();
+        const query = document.getElementById('search-query').value.trim();
+        const {ok, data} = await api('GET', '/api/admin/users' + (query ? '?query=' + encodeURIComponent(query) : ''));
+        if (!ok) return;
+        const tbody = document.getElementById('user-list');
+        tbody.innerHTML = '';
+        document.getElementById('user-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(u => {
+            const tr = document.createElement('tr');
+            const cells = [
+                u.email,
+                u.displayName || '-',
+                u.status,
+                u.role,
+                u.mfaEnabled ? I18N.mfaOn : '-',
+                new Date(u.createdAt).toLocaleDateString(),
+            ];
+            cells.forEach(text => {
+                const td = document.createElement('td');
+                td.textContent = text;
+                tr.appendChild(td);
+            });
+            const actionTd = document.createElement('td');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'link';
+            btn.style.cssText = 'background:none;border:none;';
+            btn.textContent = I18N.detail;
+            btn.onclick = () => showDetail(u.id);
+            actionTd.appendChild(btn);
+            tr.appendChild(actionTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function detailRow(label, value) {
+        const row = document.createElement('div');
+        row.className = 'info-row';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'label';
+        labelSpan.textContent = label;
+        const valueSpan = document.createElement('span');
+        valueSpan.textContent = value;
+        row.appendChild(labelSpan);
+        row.appendChild(valueSpan);
+        return row;
+    }
+
+    async function showDetail(userId) {
+        clearError();
+        const {ok, data} = await api('GET', '/api/admin/users/' + encodeURIComponent(userId));
+        if (!ok) { showError(I18N.loadFailed); return; }
+        selectedUserId = userId;
+        const u = data.user;
+
+        document.getElementById('detail-title').textContent = I18N.detailTitle.replace('{0}', u.email);
+        const rows = document.getElementById('detail-rows');
+        rows.innerHTML = '';
+        rows.appendChild(detailRow(I18N.rowName, u.displayName || '-'));
+        rows.appendChild(detailRow(I18N.rowStatus, u.status));
+        rows.appendChild(detailRow(I18N.rowRole, u.role));
+        rows.appendChild(detailRow(I18N.rowEmailVerify, u.emailVerified ? I18N.verified : I18N.unverified));
+        rows.appendChild(detailRow(I18N.rowMfa, u.mfaEnabled ? I18N.mfaEnabled : I18N.mfaDisabled));
+        rows.appendChild(detailRow(I18N.rowPasskey, data.passkeyCount + I18N.countSuffix));
+        rows.appendChild(detailRow(I18N.rowFederated, data.federatedProviders.length ? data.federatedProviders.join(', ') : '-'));
+        rows.appendChild(detailRow(I18N.rowSessions, data.activeSessionCount + I18N.countSuffix));
+        rows.appendChild(detailRow(I18N.rowJoined, formatDateTime(u.createdAt)));
+
+        const suspendBtn = document.getElementById('suspend-btn');
+        if (u.status === 'SUSPENDED') {
+            suspendBtn.textContent = I18N.unsuspend;
+            suspendBtn.onclick = () => act('/unsuspend', I18N.unsuspendConfirm.replace('{0}', u.email));
+        } else {
+            suspendBtn.textContent = I18N.suspend;
+            suspendBtn.onclick = () => act('/suspend', I18N.suspendConfirm.replace('{0}', u.email));
+        }
+
+        const roleBtn = document.getElementById('role-btn');
+        if (u.role === 'ADMIN') {
+            roleBtn.textContent = I18N.revokeAdmin;
+            roleBtn.onclick = () => changeRole('USER', I18N.revokeAdminConfirm.replace('{0}', u.email));
+        } else {
+            roleBtn.textContent = I18N.grantAdmin;
+            roleBtn.onclick = () => changeRole('ADMIN', I18N.grantAdminConfirm.replace('{0}', u.email));
+        }
+
+        document.getElementById('revoke-sessions-btn').onclick =
+            () => act('/sessions/revoke', I18N.revokeSessionsConfirm.replace('{0}', u.email));
+
+        const auditBody = document.getElementById('detail-audit');
+        auditBody.innerHTML = '';
+        document.getElementById('detail-audit-empty').classList.toggle('hidden', data.recentAuditEvents.length > 0);
+        data.recentAuditEvents.forEach(e => {
+            const tr = document.createElement('tr');
+            const timeTd = document.createElement('td');
+            timeTd.textContent = formatDateTime(e.createdAt);
+            const typeTd = document.createElement('td');
+            typeTd.textContent = e.type;
+            const detailTd = document.createElement('td');
+            detailTd.className = 'detail-cell';
+            detailTd.textContent = e.detail || '';
+            tr.appendChild(timeTd);
+            tr.appendChild(typeTd);
+            tr.appendChild(detailTd);
+            auditBody.appendChild(tr);
+        });
+
+        document.getElementById('user-detail').classList.remove('hidden');
+    }
+
+    async function act(path, confirmMessage) {
+        clearError();
+        if (!confirm(confirmMessage)) return;
+        const {ok, data, reauth} = await api('POST', '/api/admin/users/' + encodeURIComponent(selectedUserId) + path);
+        if (!ok) {
+            if (!reauth) showError(data.message || I18N.actionFailed);
+            return;
+        }
+        await showDetail(selectedUserId);
+        loadUsers();
+    }
+
+    async function changeRole(role, confirmMessage) {
+        clearError();
+        if (!confirm(confirmMessage)) return;
+        const {ok, data, reauth} = await api(
+            'POST',
+            '/api/admin/users/' + encodeURIComponent(selectedUserId) + '/role',
+            {role},
+        );
+        if (!ok) {
+            if (!reauth) showError(data.message || I18N.roleChangeFailed);
+            return;
+        }
+        await showDetail(selectedUserId);
+        loadUsers();
+    }
+
+    document.getElementById('search-query').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') loadUsers();
+    });
+    loadUsers();
+</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+spring:
+  application:
+    name: taspa
+  datasource:
+    url: jdbc:postgresql://localhost:5433/taspa
+    username: taspa
+    password: taspa
+    hikari:
+      maximum-pool-size: 10
+      # 커넥션을 60초 넘게 붙들고 있는 스레드의 **스택 트레이스**를 WARN 으로 남긴다(누수/정체 조기 경보).
+      # 이 저장소에는 커넥션을 60초 근처까지 정당하게 쥐는 경로가 없으므로 오탐이 사실상 없다.
+      # 근거: 초대 수락의 자기 교착(아래 options 주석)은 워커·커넥션을 영구히 묶었지만, 완료 시점에만
+      # 기록하는 http_server_requests 타이머에는 **영원히 나타나지 않았다** — 이 WARN 이 유일한 조기 신호다.
+      leak-detection-threshold: 60000
+      # ★PostgreSQL 세션 타임아웃 — 애플리케이션발 "무한 대기" 를 시끄러운 실패로 바꾸는 방어선.
+      #
+      # 왜 필요한가: `OrgInvitationService.accept()` 는 FOR UPDATE 로 행을 잠근 채 REQUIRES_NEW(=다른
+      # 커넥션)로 같은 행을 UPDATE 했다. 안쪽은 바깥의 행 잠금을, 바깥은 안쪽 JDBC 반환을 기다린다.
+      # **PostgreSQL 교착 탐지기는 발동하지 않는다** — DB 가 보는 대기자는 안쪽 하나뿐이라 잠금 그래프에
+      # 순환이 없다. 타임아웃이 0(무제한)이면 톰캣 워커와 커넥션 2개가 영구히 묶인다(풀 20 → 클릭 10번에 전멸).
+      #
+      #  - lock_timeout=3s : 이 결함의 **정확한** 방어선(안쪽 UPDATE 가 3초 뒤 55P03 으로 중단 → 전체 롤백).
+      #    저장소의 모든 비관적 잠금은 단일 행·밀리초 보유라 정상 운영에서 발동하지 않는다(최악의 30배 여유).
+      #  - idle_in_transaction_session_timeout=60s : 이 **부류 전체**의 방어선. statement_timeout 은
+      #    "트랜잭션은 열렸는데 DB 에 아무 말도 안 하는" 바깥 세션을 절대 잡지 못한다 — 이것만이 잡는다.
+      #    하한은 코드가 정한다: PasswordResetService 가 트랜잭션 안에서 HIBP(최대 3s)+bcrypt(~0.4s)를
+      #    돌므로 알려진 최악이 ~3.5초다. 60s 는 그 17배 여유.
+      #
+      # ★statement_timeout 은 **의도적으로 켜지 않는다** — RetentionCleanupJob 의 oauth2_authorization
+      #   정리는 GREATEST(...) 라 인덱스를 못 타는 순차 스캔 DELETE 이고, 단일 트랜잭션이라 한 문장이 죽으면
+      #   8개 DELETE 가 통째로 롤백된다. 매일 새벽 조용히 실패하고 테이블이 무한 증가한다(CLAUDE.md 참고).
+      #
+      # ★배치 위치가 base(전 프로파일)인 이유: prod 에만 켜면 값이 틀렸다는 걸 프로덕션에서 알게 된다.
+      #   여기 두면 Testcontainers 통합 테스트가 같은 타임아웃 아래 돌아, 미래의 자기 교착이 **무한 정지가
+      #   아니라 3초 만의 테스트 실패**가 된다. JDBC URL 에 넣으면 안 된다 — IntegrationTestBase 의
+      #   @DynamicPropertySource 가 spring.datasource.url 을 통째로 갈아끼워 테스트에서 조용히 사라진다.
+      data-source-properties:
+        options: "-c lock_timeout=3s -c idle_in_transaction_session_timeout=60s"
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    # dialect 는 명시하지 않는다 — Hibernate 6 이 JDBC 메타데이터로 자동 선택하고, 명시하면
+    # 기동 때마다 HHH90000025 WARN 을 남긴다. 프로덕션 로그의 상시 WARN 은 그 자체로 비용이다:
+    # 무해한 줄이 매 기동 최상단에 뜨면 사람이 WARN 을 훑지 않는 습관이 들고, 진짜 경고가 묻힌다.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    postgresql:
+      # CREATE INDEX CONCURRENTLY(V30~) 를 쓰려면 반드시 false 여야 한다. 기본값 true 는 Flyway 가
+      # 마이그레이션 전체를 스키마 히스토리 연결의 트랜잭션(pg_advisory_xact_lock)으로 감싸는데,
+      # 그 연결이 idle-in-transaction 으로 스냅샷을 붙들고 있으면 CONCURRENTLY 빌드가 그 가상 xid 를
+      # 영원히 기다린다 — 부팅이 무한 정지한다(실측: 신규 DB 에서 V30 에서 멈춤).
+      # false 는 트랜잭션 대신 세션 스코프 pg_advisory_lock 을 쓰므로 다중 인스턴스 동시 기동
+      # 상호배제는 그대로 유지된다(PostgreSQLAdvisoryLockTemplate).
+      transactional-lock: false
+    # ★마이그레이션은 **앱 커넥션 풀을 쓰지 않는다** — `config/FlywayConnectionConfig` 가 Flyway 에게
+    #   전용 커넥션을 주어 위 datasource 세션 타임아웃이 상속되지 않게 한다(CREATE INDEX CONCURRENTLY 가
+    #   lock_timeout·statement_timeout 양쪽에 죽고, 실패하면 INVALID 인덱스를 남긴다). 이유와 대안 검토는
+    #   그 파일의 KDoc 에 있다. init-sqls 로 되돌리는 방식은 **풀을 오염시켜서** 쓰지 않는다.
+  session:
+    jdbc:
+      # 스키마는 Flyway(V9__spring_session.sql)가 관리한다. timeout 은 기본(30분) 유지.
+      initialize-schema: never
+  # i18n MessageSource 는 I18nConfig 에서 명시적으로 정의한다(messages_ko=기본, messages_en=번역).
+  # base messages.properties 를 두지 않아 Boot 자동구성 조건이 성립하지 않으므로 코드로 구성한다.
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+server:
+  port: 9100
+  tomcat:
+    # Tomcat ThreadPool MBean 등록(기본 false). micrometer 의 TomcatMetrics 는 스레드 지표를 JMX
+    # ObjectName 질의(:type=ThreadPool,name=*)로 가져오므로, **이게 false 면 tomcat_threads_busy_threads
+    # 게이지가 아예 등록되지 않는다** — "워커가 몇 개나 묶였는가"를 직접 보여주는 유일한 지표가 사라진다.
+    # 비용은 MBean 등록(메모리 소량)뿐이고 요청 경로 오버헤드는 없다.
+    mbeanregistry:
+      enabled: true
+    # 리다이렉트를 **상대 경로 그대로** 내보낸다(기본값은 Tomcat 이 요청의 scheme/host/port 로 절대 URL 을 조립).
+    #
+    # 절대 변환은 프록시 뒤에서 틀린 주소를 만든다: 프록시가 전달한 Host 는 서버 자신(:9100)이라
+    # `sendRedirect("/account")` 가 `http://localhost:9100/account` 가 되고, 브라우저는 프런트 오리진(:3000)을
+    # 벗어나 서버로 튕겨 나간다(로그인 직후 화면 이탈). 상대 Location 은 브라우저가 **현재 오리진** 기준으로
+    # 해석하므로 프록시 유무·오리진과 무관하게 항상 옳다(RFC 7231 허용, 모든 최신 브라우저 지원).
+    use-relative-redirects: true
+
+taspa:
+  issuer-uri: http://localhost:9100
+  oauth:
+    # 관리 콘솔에서 클라이언트에 부여 가능한 scope 화이트리스트(Phase 0-B). 기존 OIDC 표준 3개 +
+    # 플랫폼(결제·예측·캘린더·조직) scope. 비우면 코드가 표준 3개로 폴백한다(OAuthProperties).
+    allowed-scopes:
+      - openid
+      - profile
+      - email
+      - org.read
+      # org.roles: 조직 커스텀 역할 이름 클레임. 클라이언트가 **선언한 이름과의 교집합**만 실린다
+      #   (settings.client.role-names). 선언이 없으면 scope 가 있어도 미발급(fail-closed).
+      - org.roles
+      # org.scim: SCIM 2.0 프로비저닝(M2M 전용, org 결속 필수). HR 시스템의 입·퇴사자 push 클라이언트에만 부여.
+      - org.scim
+      - meal.pay
+      # meal.redeem: 식권 QR redeem(M2M 가맹 전용). merchant 결속(merchant_id 클레임) 클라이언트에만 부여.
+      - meal.redeem
+      - merchant.read
+      - merchant.write
+      - settlement.read
+      - settlement.write
+      - meal.consumption.read
+      # meal.consumption.write: 소비 이벤트 적재(M2M). org 결속 토큰만 적재 가능(경로 org 권위).
+      - meal.consumption.write
+      # meal.consumption.read.all: 신뢰 플랫폼(예측 파이프라인)의 집계 전조회 전용. 일반 클라이언트 금지 —
+      # 일반 발급형 meal.consumption.read 는 호출자 org 결속을 강제한다(테넌시 격리).
+      - meal.consumption.read.all
+      - meal.forecast.read
+      - meal.forecast.write
+      - calendar.read
+      # calendar.read.all: 신뢰 플랫폼 서비스(M2M)의 전조회 전용. 일반 사용자 클라이언트에 부여 금지 —
+      # 일반 발급형 calendar.read 는 호출자 org 결속(멤버십/토큰 org 클레임)을 강제한다(테넌시 격리).
+      - calendar.read.all
+  billing:
+    # 월 청구서 자동 생성(DRAFT 만 — 확정은 사람의 일). 끄면 아무도 누르지 않은 달의 청구가
+    # 조용히 누락되므로, 끄기 전에 대체 절차가 있는지 확인할 것.
+    auto-generate-enabled: true
+    auto-generate-cron: "0 20 3 * * *"
+    # 달이 바뀐 뒤 며칠 기다렸다가 만든다. 경계 직전 거래의 POS 재전송·취소가 늦게 도착할 수 있고,
+    # 잡은 "없을 때만" 만들므로 첫 초안이 옛 숫자로 굳는다.
+    auto-generate-grace-days: 2
+  admin:
+    # 기동 시 ADMIN 으로 승격할 이메일(존재하는 계정만). 첫 관리자 지정법은 README 참고.
+    emails: []
+  cors:
+    # 신뢰 오리진 화이트리스트(쉼표 구분). 비우면 cross-origin 전면 거부 — same-origin 페이지는 무관.
+    # 과거의 "* + credentials" 반사는 임의 사이트가 세션 쿠키로 /api 응답을 읽게 하므로 금지.
+    allowed-origins: ""
+  password-policy:
+    min-length: 12
+    max-length: 128
+    require-uppercase: true
+    require-lowercase: true
+    require-digit: true
+    require-special: true
+    breach-check:
+      # HaveIBeenPwned k-익명 유출 비밀번호 검사(가입·비밀번호 변경·재설정에 적용).
+      # 기본 off — 켜면 정책 통과 비밀번호에 대해서만 SHA-1 prefix 5자를 range API 로 조회한다(원문 미전송).
+      enabled: false
+      # 연결/읽기 타임아웃(로그인·가입 지연 상한).
+      timeout: 2s
+      # HIBP 장애(타임아웃·5xx·네트워크 오류) 시 통과시킬지(가용성 우선). false 면 안전 측(거부)으로 fail-closed.
+      fail-open: true
+      # range 엔드포인트 base URL(뒤에 SHA-1 prefix 5자를 경로로 붙인다).
+      api-url: https://api.pwnedpasswords.com/range
+  registered-clients:
+    seed-demo-client: false
+  mfa:
+    encryption-key: ${MFA_ENCRYPTION_KEY:dev-only-key-do-not-use-in-production}
+    totp-issuer: taspa
+    backup-code-count: 10
+  account-lockout:
+    max-attempts: 5
+    lockout-duration-minutes: 30
+  email-verification:
+    code-ttl-minutes: 10
+    resend-interval-seconds: 60
+  password-reset:
+    token-expiry-minutes: 30
+    resend-interval-seconds: 60
+    base-url: http://localhost:9100
+  trusted-device:
+    expiry-days: 30
+  risk:
+    # 리스크 기반 인증(비밀번호 로그인 경로만). 신호·판정표는 docs/architecture.md 참고.
+    enabled: true
+    unseen-window-days: 90
+  step-up:
+    max-age: 10m
+  jwk:
+    # encryption-key 미설정 시 mfa 키로 폴백(EncryptionConfig). 회전 주기/유예는 Duration 표기.
+    rotation-period: 30d
+    retirement-grace: 7d
+  magic-link:
+    token-expiry-minutes: 15
+    resend-interval-seconds: 60
+    base-url: http://localhost:9100
+  consumption:
+    # 소비 이벤트 ingest 1회 배치(events 배열) 크기 상한 — 무제한 배치 자원고갈 방지. 초과 시 400.
+    max-batch-size: 1000
+  org-invitation:
+    # 초대 토큰 만료(일). 조직 온보딩 초대 링크의 유효 기간.
+    expiry-days: 7
+    # org·시간당 초대 발송 상한(이메일 폭탄·행 무한 증식 방지).
+    max-per-hour: 20
+    # 수락 링크 base URL. {base-url}/orgs/invite/accept?token=... 로 조립한다.
+    base-url: http://localhost:9100
+
+management:
+  endpoint:
+    health:
+      # liveness/readiness 프로브를 **모든 프로파일에서** 노출한다(쿠버네티스 감지에만 의존하지 않는다).
+      # 컨테이너 HEALTHCHECK 가 /actuator/health/liveness 를 보므로(Dockerfile), 프로파일에 따라 이 경로가
+      # 404 가 되면 헬스체크 실패 → 재시작 루프가 된다. 프로브 존재를 프로파일과 분리해 그 함정을 없앤다.
+      # (prod 는 여기에 더해 그룹 구성·show-details=never 를 application-prod.yml 에서 지정한다)
+      probes:
+        enabled: true
+
+logging:
+  level:
+    # 기본(prod 포함) 로깅은 INFO — DEBUG 는 아래 dev 블록에서만 켠다(PII 축적·성능 저하 방지).
+    com.taspa: INFO
+    org.springframework.security: INFO
+  pattern:
+    # 요청 상관관계 ID(CorrelationIdFilter 가 MDC 에 심는다)를 평문 콘솔 로그에 노출한다.
+    # Boot 기본 CONSOLE_LOG_PATTERN 의 ${LOG_CORRELATION_PATTERN} 자리에 그대로 끼워지므로
+    # 나머지 기본 포맷(색상·PID·로거명)은 건드리지 않는다. 요청 밖(기동·스케줄 잡) 로그는 빈 값.
+    # prod 는 구조화(JSON) 인코더로 대체되어 이 패턴을 쓰지 않는다(application-prod.yml).
+    correlation: "[%X{correlationId:-}] "
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+taspa:
+  registered-clients:
+    seed-demo-client: true
+  cors:
+    # 개발 편의 전용 — 웹 SPA(web/, Next.js dev 서버 :3000)가 `/api`·`/login` 을 프록시할 때
+    # 브라우저가 붙이는 Origin 헤더가 그대로 전달되므로, 이 오리진을 허용하지 않으면 폼 전송·상태변경이
+    # "Invalid CORS request" 로 거절된다.
+    #
+    # ★운영에서는 필요 없다 — 리버스 프록시가 SPA 와 taspa 를 **같은 오리진**에 두므로 브라우저가 이를
+    # cross-origin 으로 보지 않는다. prod 는 기본값(전면 거부)을 유지한다(application-prod.yml 미설정).
+    allowed-origins: "http://localhost:3000"
+logging:
+  level:
+    com.taspa: DEBUG

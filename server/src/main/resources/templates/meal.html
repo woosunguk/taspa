@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{meal.title}">Meal pass · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+
+    <div style="text-align:right; margin: 0 0 4px;">
+        <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+    </div>
+
+    <h1 class="auth-title" th:text="#{meal.heading}">Meal QR</h1>
+    <p class="hint" style="margin:4px 0 16px;" th:text="#{meal.subtitle}">Show the QR code at the counter to pay with your company meal allowance.</p>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <div id="no-org" class="hint hidden" th:text="#{meal.noOrg}">You are not a member of any organization.</div>
+
+    <div id="qr-section" class="hidden">
+        <div class="field">
+            <label for="org-select" th:text="#{meal.orgLabel}">Organization to charge</label>
+            <select id="org-select"></select>
+        </div>
+        <div class="actions">
+            <button type="button" id="issue-btn" class="btn-primary" onclick="issueQr()" th:text="#{meal.issue}">Issue QR</button>
+        </div>
+
+        <div id="qr-panel" class="hidden" style="margin-top:16px;text-align:center;">
+            <div class="qr"><canvas id="qr-canvas" th:attr="aria-label=#{meal.qrAlt}" aria-label="Meal QR code"></canvas></div>
+            <div id="qr-token" class="hint" style="font-family:monospace;word-break:break-all;"></div>
+            <div id="qr-countdown" class="hint" style="margin-top:8px;"></div>
+            <div id="qr-expired" class="alert alert-error hidden" th:text="#{meal.expired}">The QR code has expired. Issue a new one.</div>
+            <div class="actions hidden" id="reissue-wrap">
+                <button type="button" class="btn-secondary" onclick="issueQr()" th:text="#{meal.reissue}">Issue again</button>
+            </div>
+        </div>
+    </div>
+
+    <hr class="divider">
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{meal.txn.heading}">Recent transactions</h2>
+    <div id="txn-empty" class="hint hidden" style="margin-top:8px;" th:text="#{meal.txn.empty}">No transactions yet</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{meal.txn.col.time}">Time</th>
+                <th th:text="#{meal.txn.col.merchant}">Merchant</th>
+                <th th:text="#{meal.txn.col.amount}">Amount</th>
+                <th th:text="#{meal.txn.col.selfPaid}">Self-paid</th>
+                <th th:text="#{meal.txn.col.status}">Status</th>
+            </tr>
+            </thead>
+            <tbody id="txn-list"></tbody>
+        </table>
+    </div>
+</main>
+
+<script src="/js/qrcode.js"></script>
+<script th:inline="javascript">
+    window.I18N = {
+        membershipsLoadFailed: [[#{meal.js.membershipsLoadFailed}]],
+        issueFailed: [[#{meal.js.issueFailed}]],
+        qrRenderFailed: [[#{meal.js.qrRenderFailed}]],
+        rateLimited: [[#{meal.rateLimited}]],
+        countdown: [[#{meal.countdown}]],
+        txnLoadFailed: [[#{meal.txn.js.loadFailed}]],
+        statuses: {
+            APPROVED: [[#{meal.status.APPROVED}]],
+            VOIDED: [[#{meal.status.VOIDED}]],
+        },
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/meal');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data, serverDate: res.headers.get('Date')};
+    }
+
+    function showError(m) { const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); }
+    function clearError() { document.getElementById('error').classList.add('hidden'); }
+    function cell(text, mono) { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; }
+    function fmtAmount(n) { return Number(n).toLocaleString(); }
+
+    async function loadMemberships() {
+        const {ok, data} = await api('GET', '/api/orgs/memberships');
+        if (!ok) { showError(I18N.membershipsLoadFailed); return; }
+        if (!data.length) {
+            document.getElementById('no-org').classList.remove('hidden');
+            return;
+        }
+        const sel = document.getElementById('org-select');
+        sel.innerHTML = '';
+        data.forEach(m => {
+            const o = document.createElement('option');
+            o.value = m.orgId;
+            o.textContent = m.orgName;
+            sel.appendChild(o);
+        });
+        // 소속이 1개면 자동 선택된 상태(첫 옵션)로 바로 발급 가능하다.
+        document.getElementById('qr-section').classList.remove('hidden');
+    }
+
+    let countdownTimer = null;
+
+    async function issueQr() {
+        clearError();
+        const orgId = document.getElementById('org-select').value;
+        if (!orgId) return;
+        const btn = document.getElementById('issue-btn');
+        btn.disabled = true;
+        const {ok, status, data, reauth, serverDate} = await api('POST', '/api/meal/qr', {orgId});
+        btn.disabled = false;
+        if (reauth) return;
+        if (!ok) {
+            // 쿨다운 429 는 재시도 안내, 그 외는 서버 message 우선.
+            showError(status === 429 ? (data.message || I18N.rateLimited) : (data.message || I18N.issueFailed));
+            return;
+        }
+        // 기기 시계 오차 보정: 서버 Date 헤더 기준 남은 시간을 응답 수신 시각에 앵커링한 로컬 데드라인 사용.
+        const expiresAtMs = new Date(data.expiresAt).getTime();
+        const serverNowMs = Date.parse(serverDate || '');
+        showQr(data.token, Number.isFinite(serverNowMs)
+            ? Date.now() + Math.max(0, expiresAtMs - serverNowMs)
+            : expiresAtMs);
+    }
+
+    function showQr(token, expiresAtMs) {
+        const panel = document.getElementById('qr-panel');
+        const canvas = document.getElementById('qr-canvas');
+        panel.classList.remove('hidden');
+        document.getElementById('qr-expired').classList.add('hidden');
+        document.getElementById('reissue-wrap').classList.add('hidden');
+        canvas.classList.remove('hidden');
+        try {
+            drawQrCode(canvas, token);
+        } catch (e) {
+            // 렌더만 실패 — 발급은 이미 성공했으므로 이전 QR 픽셀 재노출을 막고(canvas 숨김)
+            // 토큰 문자열·카운트다운은 정상 진행한다.
+            canvas.classList.add('hidden');
+            showError(I18N.qrRenderFailed);
+        }
+        document.getElementById('qr-token').textContent = token;
+        if (countdownTimer) clearInterval(countdownTimer);
+        const tick = () => {
+            const remain = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
+            document.getElementById('qr-countdown').textContent = I18N.countdown.replace('{0}', String(remain));
+            if (remain <= 0) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                canvas.classList.add('hidden');
+                document.getElementById('qr-token').textContent = '';
+                document.getElementById('qr-countdown').textContent = '';
+                document.getElementById('qr-expired').classList.remove('hidden');
+                document.getElementById('reissue-wrap').classList.remove('hidden');
+                loadTransactions(); // 만료 사이 결제됐을 수 있으니 이력 갱신.
+            }
+        };
+        tick();
+        countdownTimer = setInterval(tick, 1000);
+    }
+
+    async function loadTransactions() {
+        const {ok, data} = await api('GET', '/api/meal/transactions?limit=20');
+        if (!ok) { showError(I18N.txnLoadFailed); return; }
+        const tbody = document.getElementById('txn-list');
+        tbody.innerHTML = '';
+        document.getElementById('txn-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(t => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(new Date(t.approvedAt).toLocaleString()));
+            tr.appendChild(cell(t.merchantName || '-'));
+            tr.appendChild(cell(fmtAmount(t.amountMinor)));
+            tr.appendChild(cell(fmtAmount(t.selfPaidMinor)));
+            const statusTd = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge ' + (t.status === 'VOIDED' ? 'badge-off' : 'badge-on');
+            badge.textContent = (I18N.statuses && I18N.statuses[t.status]) || t.status;
+            statusTd.appendChild(badge);
+            tr.appendChild(statusTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    loadMemberships();
+    loadTransactions();
+</script>
+</body>
+</html>

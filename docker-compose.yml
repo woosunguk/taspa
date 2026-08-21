@@ -1,0 +1,59 @@
+# 개발/로컬 데모 전용 구성 — 프로덕션 배포용이 아니다.
+# 프로덕션은 이 파일이 아니라, 컨테이너화한 앱 이미지(Dockerfile) + 외부 관리형 Postgres +
+# 시크릿 매니저 주입(prod 프로파일) + 고정 이미지 태그 + restart 정책의 별도 매니페스트로 배포한다.
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: taspa
+      POSTGRES_USER: taspa
+      POSTGRES_PASSWORD: taspa   # dev 전용 약한 비밀번호 — prod 는 시크릿 주입(DB_PASSWORD)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taspa -d taspa"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailpit:
+    # 가변 태그(latest) 금지 — 고정 태그로 재현성 확보.
+    image: axllent/mailpit:v1.20
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  # 로컬 풀스택 데모용 앱 서비스. `docker compose --profile app up` 으로 기동.
+  # 컨테이너 네트워크 기준 값은 Spring relaxed binding(SPRING_DATASOURCE_*, SPRING_MAIL_*)으로 오버라이드한다.
+  #
+  # ★SPRING_PROFILES_ACTIVE 를 **명시**해야 한다. 이미지가 prod 를 내장(Dockerfile 의 ENV)하므로
+  #   비워 두면 로컬 데모가 prod 로 뜬다 — https issuer·시크릿 강도·필수 환경변수를 강제하는 프로파일이라
+  #   기동 자체가 실패한다. 한동안 주석만 "로컬 데모에는 prod 를 쓰지 않는다"고 적혀 있고 설정은
+  #   그대로 prod 였다(주석이 코드와 어긋난 전형적인 형태 — `docker compose --profile app up` 을
+  #   실제로 돌려 본 사람이 없었다는 뜻이다).
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev   # 데모 클라이언트 시딩 — 이 구성의 목적이 SSO 데모다
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/taspa
+      SPRING_DATASOURCE_USERNAME: taspa
+      SPRING_DATASOURCE_PASSWORD: taspa
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: "1025"
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    profiles:
+      # 기본 `docker compose up` 에는 포함되지 않는다 — 인프라만 필요할 때 앱 빌드를 강제하지 않기 위함.
+      # 앱까지 띄우려면: docker compose --profile app up
+      - app
+
+volumes:
+  postgres_data:

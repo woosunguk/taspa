@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+
+# Environment
+.env
+# 배포용 시크릿 — `.env` 패턴은 이름이 정확히 .env 인 파일만 잡는다(.env.prod 는 안 잡힌다).
+.env.prod
+.env.*.local
+!.env.prod.example
+application-local.yml
+
+# Node
+node_modules/
+e2e/test-results/

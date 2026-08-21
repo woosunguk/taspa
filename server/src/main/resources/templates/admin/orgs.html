@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.orgs.title}">Organizations · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" class="active" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.orgs.listHeading}">Organizations</h2>
+    <div id="org-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.orgs.empty}">No organizations</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.orgs.col.name}">Name</th>
+                <th>slug</th>
+                <th th:text="#{admin.orgs.col.status}">Status</th>
+                <th th:text="#{admin.orgs.col.members}">Members</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="org-list"></tbody>
+        </table>
+    </div>
+
+    <hr class="divider">
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.orgs.create.heading}">Create an organization</h2>
+    <div class="field" style="margin-top:16px;">
+        <label for="org-name" th:text="#{admin.orgs.create.nameLabel}">Name</label>
+        <input type="text" id="org-name" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="org-slug" th:text="#{admin.orgs.create.slugLabel}">slug (optional — derived from name)</label>
+        <input type="text" id="org-slug" autocomplete="off">
+    </div>
+    <div class="actions end">
+        <button type="button" class="btn-primary" onclick="createOrg()" th:text="#{admin.orgs.create.submit}">Create</button>
+    </div>
+
+    <!-- 상세 -->
+    <div id="detail-panel" class="hidden">
+        <hr class="divider">
+        <h2 class="auth-title" style="font-size:18px;" id="detail-title" th:text="#{admin.orgs.detail.heading}">Organization detail</h2>
+
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{admin.orgs.detail.membersHeading}">Members</h3>
+        <div id="member-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.orgs.detail.memberEmpty}">No members</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{admin.orgs.member.col.email}">Email</th>
+                    <th th:text="#{admin.orgs.member.col.role}">Role</th>
+                    <th th:text="#{admin.orgs.member.col.dept}">Department</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="member-list"></tbody>
+            </table>
+        </div>
+
+        <div class="field" style="margin-top:16px;">
+            <label for="member-user-id" th:text="#{admin.orgs.member.userIdLabel}">Add member — user ID (UUID)</label>
+            <input type="text" id="member-user-id" autocomplete="off">
+        </div>
+        <div class="check-row">
+            <label><input type="radio" name="member-role" value="MEMBER" checked> <span th:text="#{admin.orgs.role.member}">Member</span></label>
+            <label><input type="radio" name="member-role" value="ORG_ADMIN"> <span th:text="#{admin.orgs.role.orgAdmin}">Org admin</span></label>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="addMember()" th:text="#{admin.orgs.member.add}">Add member</button>
+        </div>
+
+        <!-- 이메일 도메인 자동 가입 — 플랫폼 관리: 등록·DNS 검증·강제검증(수동 승인)·검증철회·삭제 + opt-in -->
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{admin.orgs.domains.heading}">Email domain auto-join</h3>
+        <div class="check-row">
+            <label><input type="checkbox" id="autojoin-toggle" onchange="toggleAutoJoin(this)"> <span th:text="#{admin.orgs.domains.autoJoinLabel}">Auto-join enabled (opt-in)</span></label>
+        </div>
+        <div id="domain-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.orgs.domains.empty}">No domains registered</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{admin.orgs.domains.col.domain}">Domain</th>
+                    <th th:text="#{admin.orgs.domains.col.status}">Status</th>
+                    <th th:text="#{admin.orgs.domains.col.txt}">DNS TXT record</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="domain-list"></tbody>
+            </table>
+        </div>
+        <div class="field" style="margin-top:12px;">
+            <label for="domain-name" th:text="#{admin.orgs.domains.nameLabel}">Domain (e.g. acme.com)</label>
+            <input type="text" id="domain-name" autocomplete="off" placeholder="acme.com">
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="addDomain()" th:text="#{admin.orgs.domains.add}">Add domain</button>
+        </div>
+
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{admin.orgs.sso.heading}">SSO connections</h3>
+        <div id="sso-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.orgs.sso.empty}">No SSO connections</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th>registration_id</th>
+                    <th th:text="#{admin.orgs.sso.col.name}">Name</th>
+                    <th th:text="#{admin.orgs.sso.col.linked}">Linked</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="sso-list"></tbody>
+            </table>
+        </div>
+
+        <!-- 초대 -->
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{admin.orgs.invite.heading}">Invitations</h3>
+        <div id="invite-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.orgs.invite.empty}">No pending invitations</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{admin.orgs.invite.col.email}">Email</th>
+                    <th th:text="#{admin.orgs.invite.col.role}">Role</th>
+                    <th th:text="#{admin.orgs.invite.col.dept}">Department</th>
+                    <th th:text="#{admin.orgs.invite.col.expires}">Expires</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="invite-list"></tbody>
+            </table>
+        </div>
+
+        <div class="field" style="margin-top:16px;">
+            <label for="invite-email" th:text="#{admin.orgs.invite.emailLabel}">Email to invite</label>
+            <input type="email" id="invite-email" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="invite-dept" th:text="#{admin.orgs.invite.deptLabel}">Department (optional)</label>
+            <input type="text" id="invite-dept" autocomplete="off">
+        </div>
+        <div class="check-row">
+            <label><input type="radio" name="invite-role" value="MEMBER" checked> <span th:text="#{admin.orgs.role.member}">Member</span></label>
+            <label><input type="radio" name="invite-role" value="ORG_ADMIN"> <span th:text="#{admin.orgs.role.orgAdmin}">Org admin</span></label>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="sendInvite()" th:text="#{admin.orgs.invite.send}">Send invitation</button>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        statusActive: [[#{admin.orgs.status.active}]],
+        statusSuspended: [[#{admin.orgs.status.suspended}]],
+        detail: [[#{admin.orgs.action.detail}]],
+        suspend: [[#{admin.orgs.action.suspend}]],
+        activate: [[#{admin.orgs.action.activate}]],
+        roleMember: [[#{admin.orgs.role.member}]],
+        roleOrgAdmin: [[#{admin.orgs.role.orgAdmin}]],
+        makeAdmin: [[#{admin.orgs.member.makeAdmin}]],
+        makeMember: [[#{admin.orgs.member.makeMember}]],
+        remove: [[#{admin.orgs.member.remove}]],
+        removeConfirm: [[#{admin.orgs.member.removeConfirm}]],
+        detailTitle: [[#{admin.orgs.detail.titleTpl}]],
+        linkedThis: [[#{admin.orgs.sso.linkedToThis}]],
+        linkedOther: [[#{admin.orgs.sso.linkedToOther}]],
+        notLinked: [[#{admin.orgs.sso.notLinked}]],
+        link: [[#{admin.orgs.sso.link}]],
+        loadFailed: [[#{admin.orgs.js.loadFailed}]],
+        createFailed: [[#{admin.orgs.js.createFailed}]],
+        statusFailed: [[#{admin.orgs.js.statusFailed}]],
+        roleFailed: [[#{admin.orgs.js.roleFailed}]],
+        removeFailed: [[#{admin.orgs.js.removeFailed}]],
+        addFailed: [[#{admin.orgs.js.addFailed}]],
+        linkFailed: [[#{admin.orgs.js.linkFailed}]],
+        inviteRevoke: [[#{admin.orgs.invite.revoke}]],
+        inviteResend: [[#{admin.orgs.invite.resend}]],
+        inviteRevokeConfirm: [[#{admin.orgs.invite.revokeConfirm}]],
+        inviteLoadFailed: [[#{admin.orgs.invite.js.loadFailed}]],
+        inviteSendFailed: [[#{admin.orgs.invite.js.sendFailed}]],
+        inviteSent: [[#{admin.orgs.invite.js.sent}]],
+        inviteRevokeFailed: [[#{admin.orgs.invite.js.revokeFailed}]],
+        inviteResent: [[#{admin.orgs.invite.js.resent}]],
+        inviteResendFailed: [[#{admin.orgs.invite.js.resendFailed}]],
+        domainVerifiedBadge: [[#{admin.orgs.domains.status.verified}]],
+        domainPendingBadge: [[#{admin.orgs.domains.status.pending}]],
+        domainVerify: [[#{admin.orgs.domains.verify}]],
+        domainForceVerify: [[#{admin.orgs.domains.forceVerify}]],
+        domainUnverify: [[#{admin.orgs.domains.unverify}]],
+        domainDelete: [[#{admin.orgs.domains.delete}]],
+        domainDeleteConfirm: [[#{admin.orgs.domains.deleteConfirm}]],
+        domainForceVerifyConfirm: [[#{admin.orgs.domains.forceVerifyConfirm}]],
+        domainLoadFailed: [[#{admin.orgs.domains.js.loadFailed}]],
+        domainAddFailed: [[#{admin.orgs.domains.js.addFailed}]],
+        domainVerifyFailed: [[#{admin.orgs.domains.js.verifyFailed}]],
+        domainActionFailed: [[#{admin.orgs.domains.js.actionFailed}]],
+        domainDeleteFailed: [[#{admin.orgs.domains.js.deleteFailed}]],
+        autoJoinFailed: [[#{admin.orgs.domains.js.autoJoinFailed}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/orgs');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(m) { const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); }
+    function clearError() { document.getElementById('error').classList.add('hidden'); }
+    function cell(text, mono) { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; }
+    function linkBtn(text, onclick) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'link'; b.style.cssText = 'background:none;border:none;margin-right:8px;';
+        b.textContent = text; b.onclick = onclick; return b;
+    }
+
+    let orgs = [];
+    let selectedOrg = null;
+
+    function renderOrgs() {
+        const tbody = document.getElementById('org-list');
+        tbody.innerHTML = '';
+        document.getElementById('org-empty').classList.toggle('hidden', orgs.length > 0);
+        orgs.forEach(o => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(o.name));
+            tr.appendChild(cell(o.slug, true));
+            tr.appendChild(cell(o.status === 'ACTIVE' ? I18N.statusActive : I18N.statusSuspended));
+            tr.appendChild(cell(String(o.memberCount)));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.detail, () => openDetail(o.id)));
+            const suspended = o.status === 'SUSPENDED';
+            actions.appendChild(linkBtn(suspended ? I18N.activate : I18N.suspend,
+                () => setStatus(o, suspended ? 'ACTIVE' : 'SUSPENDED')));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadOrgs() {
+        const {ok, data} = await api('GET', '/api/admin/orgs');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        orgs = data;
+        renderOrgs();
+    }
+
+    async function createOrg() {
+        clearError();
+        const {ok, data} = await api('POST', '/api/admin/orgs', {
+            name: document.getElementById('org-name').value.trim(),
+            slug: document.getElementById('org-slug').value.trim() || null,
+        });
+        if (!ok) { showError(data.message || I18N.createFailed); return; }
+        document.getElementById('org-name').value = '';
+        document.getElementById('org-slug').value = '';
+        loadOrgs();
+    }
+
+    async function setStatus(o, status) {
+        clearError();
+        const {ok, data} = await api('PUT', '/api/admin/orgs/' + encodeURIComponent(o.id), {status});
+        if (!ok) { showError(data.message || I18N.statusFailed); return; }
+        loadOrgs();
+        if (selectedOrg === o.id) openDetail(o.id);
+    }
+
+    async function openDetail(id) {
+        clearError();
+        selectedOrg = id;
+        const org = orgs.find(o => o.id === id);
+        document.getElementById('detail-panel').classList.remove('hidden');
+        document.getElementById('detail-title').textContent = I18N.detailTitle.replace('{0}', org ? org.name : id);
+        await Promise.all([loadMembers(id), loadSso(id), loadInvitations(id), loadDomains(id)]);
+        document.getElementById('detail-panel').scrollIntoView({behavior: 'smooth'});
+    }
+
+    async function loadMembers(id) {
+        const {ok, data} = await api('GET', '/api/admin/orgs/' + encodeURIComponent(id) + '/members');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        const tbody = document.getElementById('member-list');
+        tbody.innerHTML = '';
+        document.getElementById('member-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(m => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(m.email || m.userId, true));
+            tr.appendChild(cell(m.role === 'ORG_ADMIN' ? I18N.roleOrgAdmin : I18N.roleMember));
+            tr.appendChild(cell(m.department || '-'));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            const isAdmin = m.role === 'ORG_ADMIN';
+            actions.appendChild(linkBtn(isAdmin ? I18N.makeMember : I18N.makeAdmin,
+                () => changeRole(id, m.userId, isAdmin ? 'MEMBER' : 'ORG_ADMIN')));
+            actions.appendChild(linkBtn(I18N.remove, () => removeMember(id, m)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function changeRole(id, userId, role) {
+        clearError();
+        const {ok, data} = await api('PUT', '/api/admin/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(userId) + '/role', {role});
+        if (!ok) { showError(data.message || I18N.roleFailed); return; }
+        loadMembers(id);
+    }
+
+    async function removeMember(id, m) {
+        clearError();
+        if (!confirm(I18N.removeConfirm.replace('{0}', m.email || m.userId))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(m.userId));
+        if (!ok) { showError(data.message || I18N.removeFailed); return; }
+        loadMembers(id);
+        loadOrgs();
+    }
+
+    async function addMember() {
+        clearError();
+        const userId = document.getElementById('member-user-id').value.trim();
+        const role = document.querySelector('input[name="member-role"]:checked').value;
+        const {ok, data} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(selectedOrg) + '/members', {userId, role});
+        if (!ok) { showError(data.message || I18N.addFailed); return; }
+        document.getElementById('member-user-id').value = '';
+        loadMembers(selectedOrg);
+        loadOrgs();
+    }
+
+    // ---- 이메일 도메인 자동 가입(플랫폼 관리) — /api/admin/orgs/{orgId}/domains + PUT /api/orgs/{orgId}/auto-join ----
+
+    async function loadDomains(id) {
+        const {ok, data} = await api('GET', '/api/admin/orgs/' + encodeURIComponent(id) + '/domains');
+        if (!ok) { showError(I18N.domainLoadFailed); return; }
+        document.getElementById('autojoin-toggle').checked = !!data.autoJoinEnabled;
+        const tbody = document.getElementById('domain-list');
+        tbody.innerHTML = '';
+        document.getElementById('domain-empty').classList.toggle('hidden', data.domains.length > 0);
+        data.domains.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(d.domain, true));
+            tr.appendChild(cell(d.verified ? I18N.domainVerifiedBadge : I18N.domainPendingBadge));
+            const txtTd = document.createElement('td');
+            if (d.verified) {
+                txtTd.textContent = '-';
+            } else {
+                txtTd.style.fontFamily = 'monospace';
+                txtTd.style.fontSize = '12px';
+                txtTd.textContent = d.txtRecordName + ' TXT "' + d.txtRecordValue + '"';
+            }
+            tr.appendChild(txtTd);
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            if (d.verified) {
+                actions.appendChild(linkBtn(I18N.domainUnverify, () => domainAction(id, d, 'unverify')));
+            } else {
+                actions.appendChild(linkBtn(I18N.domainVerify, () => verifyDomain(id, d)));
+                actions.appendChild(linkBtn(I18N.domainForceVerify, () => forceVerifyDomain(id, d)));
+            }
+            actions.appendChild(linkBtn(I18N.domainDelete, () => deleteDomain(id, d)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function addDomain() {
+        clearError();
+        const domain = document.getElementById('domain-name').value.trim();
+        if (!domain || !selectedOrg) return;
+        const {ok, data, reauth} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(selectedOrg) + '/domains', {domain});
+        if (reauth) return;
+        // 공용 도메인 400·전역 중복 409 는 서버 message 를 우선 안내.
+        if (!ok) { showError(data.message || I18N.domainAddFailed); return; }
+        document.getElementById('domain-name').value = '';
+        loadDomains(selectedOrg);
+    }
+
+    async function verifyDomain(id, d) {
+        clearError();
+        const {ok, data, reauth} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(id) + '/domains/' + encodeURIComponent(d.id) + '/verify');
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.domainVerifyFailed); return; }
+        loadDomains(id);
+    }
+
+    async function forceVerifyDomain(id, d) {
+        clearError();
+        if (!confirm(I18N.domainForceVerifyConfirm.replace('{0}', d.domain))) return;
+        await domainAction(id, d, 'force-verify');
+    }
+
+    async function domainAction(id, d, action) {
+        clearError();
+        const {ok, data, reauth} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(id) + '/domains/' + encodeURIComponent(d.id) + '/' + action);
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.domainActionFailed); return; }
+        loadDomains(id);
+    }
+
+    async function deleteDomain(id, d) {
+        clearError();
+        if (!confirm(I18N.domainDeleteConfirm.replace('{0}', d.domain))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/admin/orgs/' + encodeURIComponent(id) + '/domains/' + encodeURIComponent(d.id));
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.domainDeleteFailed); return; }
+        loadDomains(id);
+    }
+
+    /** opt-in 토글 — 콘솔과 동일한 전용 엔드포인트(/api/orgs/{orgId}/auto-join, 플랫폼 ADMIN 통과). */
+    async function toggleAutoJoin(cb) {
+        clearError();
+        if (!selectedOrg) return;
+        const enabled = cb.checked;
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/auto-join', {enabled});
+        if (reauth) { cb.checked = !enabled; return; }
+        if (!ok) { cb.checked = !enabled; showError(data.message || I18N.autoJoinFailed); }
+    }
+
+    async function loadSso(id) {
+        const {ok, data} = await api('GET', '/api/admin/sso');
+        if (!ok) return;
+        const tbody = document.getElementById('sso-list');
+        tbody.innerHTML = '';
+        document.getElementById('sso-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(c.registrationId, true));
+            tr.appendChild(cell(c.displayName));
+            let linkedText = I18N.notLinked;
+            if (c.orgId === id) linkedText = I18N.linkedThis;
+            else if (c.orgId) linkedText = I18N.linkedOther;
+            tr.appendChild(cell(linkedText));
+            const actions = document.createElement('td');
+            if (c.orgId !== id) {
+                actions.appendChild(linkBtn(I18N.link, () => linkSso(id, c.id)));
+            }
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function linkSso(orgId, connectionId) {
+        clearError();
+        const {ok, data} = await api('PUT', '/api/admin/orgs/' + encodeURIComponent(orgId) + '/sso/' + encodeURIComponent(connectionId));
+        if (!ok) { showError(data.message || I18N.linkFailed); return; }
+        loadSso(orgId);
+    }
+
+    // ---- 초대(Invitations) — /api/orgs/{orgId}/invitations (세션 인가: 플랫폼 ADMIN 또는 그 org ORG_ADMIN) ----
+    async function loadInvitations(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/invitations');
+        if (!ok) { showError(I18N.inviteLoadFailed); return; }
+        const tbody = document.getElementById('invite-list');
+        tbody.innerHTML = '';
+        document.getElementById('invite-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(inv => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(inv.email, true));
+            tr.appendChild(cell(inv.role === 'ORG_ADMIN' ? I18N.roleOrgAdmin : I18N.roleMember));
+            tr.appendChild(cell(inv.department || '-'));
+            tr.appendChild(cell(new Date(inv.expiresAt).toLocaleString()));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.inviteResend, () => resendInvite(id, inv)));
+            actions.appendChild(linkBtn(I18N.inviteRevoke, () => revokeInvite(id, inv)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function sendInvite() {
+        clearError();
+        const email = document.getElementById('invite-email').value.trim();
+        const department = document.getElementById('invite-dept').value.trim() || null;
+        const role = document.querySelector('input[name="invite-role"]:checked').value;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/invitations', {email, role, department});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.inviteSendFailed); return; }
+        document.getElementById('invite-email').value = '';
+        document.getElementById('invite-dept').value = '';
+        loadInvitations(selectedOrg);
+    }
+
+    async function revokeInvite(id, inv) {
+        clearError();
+        if (!confirm(I18N.inviteRevokeConfirm.replace('{0}', inv.email))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(id) + '/invitations/' + encodeURIComponent(inv.id));
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.inviteRevokeFailed); return; }
+        loadInvitations(id);
+    }
+
+    async function resendInvite(id, inv) {
+        clearError();
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(id) + '/invitations/' + encodeURIComponent(inv.id) + '/resend');
+        if (reauth) return;
+        // 쿨다운/비PENDING 등 400 은 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.inviteResendFailed); return; }
+        loadInvitations(id); // 새 만료 시각 반영.
+    }
+
+    loadOrgs();
+</script>
+</body>
+</html>

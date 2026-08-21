@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{logout.title}">Sign out · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{logout.heading}">Sign out of taspa?</h1>
+
+    <form method="post" action="/logout">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div class="actions">
+            <a class="link" href="/account" th:text="#{common.cancel}">Cancel</a>
+            <button type="submit" class="btn-primary" th:text="#{common.logout}">Log out</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.iam.title}">IAM policies · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" class="active" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <!-- ── 정책 ─────────────────────────────────────────────── -->
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.iam.policies.heading}">Policies</h2>
+    <div id="policy-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.iam.policies.empty}">No policies</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.iam.col.name}">Name</th>
+                <th th:text="#{admin.iam.policies.col.scope}">Scope</th>
+                <th th:text="#{admin.iam.policies.col.statements}">Statements</th>
+                <th th:text="#{admin.iam.policies.col.type}">Type</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="policy-list"></tbody>
+        </table>
+    </div>
+
+    <h2 class="auth-title" style="font-size:16px;margin-top:16px;" th:text="#{admin.iam.policies.formNew}">Create a policy</h2>
+    <div class="field" style="margin-top:12px;">
+        <label for="policy-name" th:text="#{admin.iam.policies.nameLabel}">Name</label>
+        <input type="text" id="policy-name" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="policy-desc" th:text="#{admin.iam.policies.descLabel}">Description (optional)</label>
+        <input type="text" id="policy-desc" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="policy-org" th:text="#{admin.iam.policies.orgLabel}">Organization UUID (optional — blank = global)</label>
+        <input type="text" id="policy-org" autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000">
+        <p class="hint" th:text="#{admin.iam.policies.orgHint}">Leave blank for a platform-global policy.</p>
+    </div>
+    <div class="field">
+        <label for="policy-doc" th:text="#{admin.iam.policies.documentLabel}">Policy document (JSON)</label>
+        <textarea id="policy-doc" rows="8"
+                  style="width:100%;padding:13px 15px;font-size:13px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+    </div>
+    <div class="actions end">
+        <button type="button" class="btn-primary" onclick="createPolicy()" th:text="#{admin.iam.policies.submit}">Create policy</button>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── 부착 ─────────────────────────────────────────────── -->
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.iam.attach.heading}">Attach / detach a managed policy</h2>
+    <div class="field" style="margin-top:12px;">
+        <label for="attach-policy" th:text="#{admin.iam.attach.policyLabel}">Policy</label>
+        <select id="attach-policy" style="width:100%;padding:12px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;"></select>
+    </div>
+    <div class="field">
+        <label for="attach-type" th:text="#{admin.iam.attach.principalTypeLabel}">Principal type</label>
+        <select id="attach-type" style="width:100%;padding:12px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;">
+            <option value="USER">USER</option>
+            <option value="GROUP">GROUP</option>
+        </select>
+    </div>
+    <div class="field">
+        <label for="attach-principal" th:text="#{admin.iam.attach.principalIdLabel}">Principal UUID (user id or group id)</label>
+        <input type="text" id="attach-principal" autocomplete="off">
+    </div>
+    <div class="actions end" style="gap:12px;">
+        <button type="button" class="btn-secondary" onclick="detach()" th:text="#{admin.iam.attach.detach}">Detach</button>
+        <button type="button" class="btn-primary" onclick="attach()" th:text="#{admin.iam.attach.submit}">Attach</button>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── 그룹 ─────────────────────────────────────────────── -->
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.iam.groups.heading}">Groups</h2>
+    <div id="group-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.iam.groups.empty}">No groups</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.iam.col.name}">Name</th>
+                <th th:text="#{admin.iam.groups.col.scope}">Scope</th>
+                <th th:text="#{admin.iam.groups.col.members}">Members</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="group-list"></tbody>
+        </table>
+    </div>
+    <div id="member-panel" class="alert alert-info hidden" style="margin-top:12px;">
+        <div id="member-heading" style="font-weight:600;margin-bottom:8px;"></div>
+        <div id="member-list" style="font-family:monospace;font-size:13px;"></div>
+        <div class="field" style="margin-top:10px;">
+            <label for="member-user" th:text="#{admin.iam.groups.memberUserLabel}">User UUID</label>
+            <input type="text" id="member-user" autocomplete="off">
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-primary" onclick="addMember()" th:text="#{admin.iam.groups.addMember}">Add member</button>
+        </div>
+    </div>
+
+    <h2 class="auth-title" style="font-size:16px;margin-top:16px;" th:text="#{admin.iam.groups.formNew}">Create a group</h2>
+    <div class="field" style="margin-top:12px;">
+        <label for="group-name" th:text="#{admin.iam.groups.nameLabel}">Name</label>
+        <input type="text" id="group-name" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="group-desc" th:text="#{admin.iam.groups.descLabel}">Description (optional)</label>
+        <input type="text" id="group-desc" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="group-org" th:text="#{admin.iam.groups.orgLabel}">Organization UUID (optional — blank = global)</label>
+        <input type="text" id="group-org" autocomplete="off">
+    </div>
+    <div class="actions end">
+        <button type="button" class="btn-primary" onclick="createGroup()" th:text="#{admin.iam.groups.submit}">Create group</button>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── 시뮬레이터 ────────────────────────────────────────── -->
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.iam.simulate.heading}">Policy simulator</h2>
+    <div class="field" style="margin-top:12px;">
+        <label for="sim-subject" th:text="#{admin.iam.simulate.subjectLabel}">Subject</label>
+        <select id="sim-subject" onchange="toggleSubject()"
+                style="width:100%;padding:12px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;">
+            <option value="SESSION" th:text="#{admin.iam.simulate.subjectSession}">Session user</option>
+            <option value="M2M" th:text="#{admin.iam.simulate.subjectM2m}">M2M client</option>
+        </select>
+    </div>
+    <div id="sim-session-fields">
+        <div class="field">
+            <label for="sim-user" th:text="#{admin.iam.simulate.userIdLabel}">User UUID</label>
+            <input type="text" id="sim-user" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="sim-org" th:text="#{admin.iam.simulate.orgIdLabel}">Organization UUID (optional)</label>
+            <input type="text" id="sim-org" autocomplete="off">
+        </div>
+        <label class="check-row" style="display:block;margin-bottom:12px;">
+            <input type="checkbox" id="sim-stepup"> <span th:text="#{admin.iam.simulate.stepUpLabel}">Recent step-up present</span>
+        </label>
+    </div>
+    <div id="sim-m2m-fields" class="hidden">
+        <div class="field">
+            <label for="sim-scopes" th:text="#{admin.iam.simulate.scopesLabel}">Scopes (space or comma separated)</label>
+            <input type="text" id="sim-scopes" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="sim-bound" th:text="#{admin.iam.simulate.boundOrgsLabel}">Bound org UUIDs (space or comma separated)</label>
+            <input type="text" id="sim-bound" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="sim-merchant" th:text="#{admin.iam.simulate.merchantIdLabel}">Merchant UUID (optional)</label>
+            <input type="text" id="sim-merchant" autocomplete="off">
+        </div>
+    </div>
+    <div class="field">
+        <label for="sim-action" th:text="#{admin.iam.simulate.actionLabel}">Action (e.g. org:UpdateProfile)</label>
+        <input type="text" id="sim-action" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="sim-resource" th:text="#{admin.iam.simulate.resourceLabel}">Resource TRN (e.g. trn:taspa:org:...:organization/...)</label>
+        <input type="text" id="sim-resource" autocomplete="off">
+    </div>
+    <div class="actions end">
+        <button type="button" class="btn-primary" onclick="simulate()" th:text="#{admin.iam.simulate.submit}">Evaluate</button>
+    </div>
+    <div id="sim-result" class="alert hidden" style="margin-top:12px;"></div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        systemBadge: [[#{admin.iam.js.systemBadge}]],
+        customerBadge: [[#{admin.iam.js.customerBadge}]],
+        globalScope: [[#{admin.iam.js.globalScope}]],
+        delete: [[#{admin.iam.js.delete}]],
+        manageMembers: [[#{admin.iam.js.manageMembers}]],
+        removeMember: [[#{admin.iam.js.removeMember}]],
+        deletePolicyConfirm: [[#{admin.iam.js.deletePolicyConfirm}]],
+        deleteGroupConfirm: [[#{admin.iam.js.deleteGroupConfirm}]],
+        createFailed: [[#{admin.iam.js.createFailed}]],
+        deleteFailed: [[#{admin.iam.js.deleteFailed}]],
+        duplicateName: [[#{admin.iam.js.duplicateName}]],
+        attachFailed: [[#{admin.iam.js.attachFailed}]],
+        detachFailed: [[#{admin.iam.js.detachFailed}]],
+        attachDone: [[#{admin.iam.js.attachDone}]],
+        detachDone: [[#{admin.iam.js.detachDone}]],
+        groupCreateFailed: [[#{admin.iam.js.groupCreateFailed}]],
+        memberFailed: [[#{admin.iam.js.memberFailed}]],
+        simulateFailed: [[#{admin.iam.js.simulateFailed}]],
+        allow: [[#{admin.iam.js.allow}]],
+        deny: [[#{admin.iam.js.deny}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/iam');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(message) {
+        const el = document.getElementById('error');
+        el.textContent = message;
+        el.classList.remove('hidden');
+        window.scrollTo({top: 0});
+    }
+
+    function clearError() {
+        document.getElementById('error').classList.add('hidden');
+    }
+
+    function tokens(id) {
+        return document.getElementById(id).value.split(/[\s,]+/).map(s => s.trim()).filter(s => s);
+    }
+
+    function trimmed(id) {
+        return document.getElementById(id).value.trim();
+    }
+
+    let policies = [];
+    let groups = [];
+
+    // ── 정책 ──
+    function renderPolicies() {
+        const tbody = document.getElementById('policy-list');
+        tbody.innerHTML = '';
+        document.getElementById('policy-empty').classList.toggle('hidden', policies.length > 0);
+        const select = document.getElementById('attach-policy');
+        select.innerHTML = '';
+        policies.forEach(p => {
+            const tr = document.createElement('tr');
+            const nameTd = document.createElement('td');
+            nameTd.textContent = p.name;
+            const scopeTd = document.createElement('td');
+            scopeTd.style.fontFamily = 'monospace';
+            scopeTd.style.fontSize = '12px';
+            scopeTd.textContent = p.orgId || I18N.globalScope;
+            const stmtTd = document.createElement('td');
+            stmtTd.textContent = p.statementCount;
+            const typeTd = document.createElement('td');
+            typeTd.textContent = p.systemManaged ? I18N.systemBadge : I18N.customerBadge;
+            const actionsTd = document.createElement('td');
+            if (!p.systemManaged) {
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'link';
+                del.style.cssText = 'background:none;border:none;';
+                del.textContent = I18N.delete;
+                del.onclick = () => deletePolicy(p);
+                actionsTd.appendChild(del);
+            }
+            tr.append(nameTd, scopeTd, stmtTd, typeTd, actionsTd);
+            tbody.appendChild(tr);
+
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            select.appendChild(opt);
+        });
+    }
+
+    async function loadPolicies() {
+        const {ok, data} = await api('GET', '/api/admin/iam/policies');
+        if (!ok) return;
+        policies = data;
+        renderPolicies();
+    }
+
+    async function createPolicy() {
+        clearError();
+        const org = trimmed('policy-org');
+        const {ok, status, data} = await api('POST', '/api/admin/iam/policies', {
+            name: trimmed('policy-name'),
+            description: trimmed('policy-desc') || null,
+            orgId: org || null,
+            document: document.getElementById('policy-doc').value,
+        });
+        if (!ok) {
+            showError(status === 409 ? I18N.duplicateName : (data.message || I18N.createFailed));
+            return;
+        }
+        document.getElementById('policy-name').value = '';
+        document.getElementById('policy-desc').value = '';
+        document.getElementById('policy-org').value = '';
+        document.getElementById('policy-doc').value = '';
+        loadPolicies();
+    }
+
+    async function deletePolicy(p) {
+        clearError();
+        if (!confirm(I18N.deletePolicyConfirm.replace('{0}', p.name))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/iam/policies/' + encodeURIComponent(p.id));
+        if (!ok) { showError(data.message || I18N.deleteFailed); return; }
+        loadPolicies();
+    }
+
+    // ── 부착 ──
+    function attachBody() {
+        return {
+            policyId: document.getElementById('attach-policy').value,
+            principalType: document.getElementById('attach-type').value,
+            principalId: trimmed('attach-principal'),
+        };
+    }
+
+    async function attach() {
+        clearError();
+        const {ok, data} = await api('POST', '/api/admin/iam/attachments', attachBody());
+        if (!ok) { showError(data.message || I18N.attachFailed); return; }
+        showError(I18N.attachDone);
+        document.getElementById('error').className = 'alert alert-info';
+    }
+
+    async function detach() {
+        clearError();
+        const {ok, data} = await api('DELETE', '/api/admin/iam/attachments', attachBody());
+        if (!ok) { showError(data.message || I18N.detachFailed); return; }
+        showError(I18N.detachDone);
+        document.getElementById('error').className = 'alert alert-info';
+    }
+
+    // ── 그룹 ──
+    function renderGroups() {
+        const tbody = document.getElementById('group-list');
+        tbody.innerHTML = '';
+        document.getElementById('group-empty').classList.toggle('hidden', groups.length > 0);
+        groups.forEach(g => {
+            const tr = document.createElement('tr');
+            const nameTd = document.createElement('td');
+            nameTd.textContent = g.name;
+            const scopeTd = document.createElement('td');
+            scopeTd.style.fontFamily = 'monospace';
+            scopeTd.style.fontSize = '12px';
+            scopeTd.textContent = g.orgId || I18N.globalScope;
+            const membersTd = document.createElement('td');
+            membersTd.textContent = g.memberCount;
+            const actionsTd = document.createElement('td');
+            actionsTd.style.whiteSpace = 'nowrap';
+            const manage = document.createElement('button');
+            manage.type = 'button';
+            manage.className = 'link';
+            manage.style.cssText = 'background:none;border:none;margin-right:8px;';
+            manage.textContent = I18N.manageMembers;
+            manage.onclick = () => openMembers(g);
+            actionsTd.appendChild(manage);
+            if (!g.systemManaged) {
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'link';
+                del.style.cssText = 'background:none;border:none;';
+                del.textContent = I18N.delete;
+                del.onclick = () => deleteGroup(g);
+                actionsTd.appendChild(del);
+            }
+            tr.append(nameTd, scopeTd, membersTd, actionsTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadGroups() {
+        const {ok, data} = await api('GET', '/api/admin/iam/groups');
+        if (!ok) return;
+        groups = data;
+        renderGroups();
+    }
+
+    async function createGroup() {
+        clearError();
+        const org = trimmed('group-org');
+        const {ok, status, data} = await api('POST', '/api/admin/iam/groups', {
+            name: trimmed('group-name'),
+            description: trimmed('group-desc') || null,
+            orgId: org || null,
+        });
+        if (!ok) {
+            showError(status === 409 ? I18N.duplicateName : (data.message || I18N.groupCreateFailed));
+            return;
+        }
+        document.getElementById('group-name').value = '';
+        document.getElementById('group-desc').value = '';
+        document.getElementById('group-org').value = '';
+        loadGroups();
+    }
+
+    async function deleteGroup(g) {
+        clearError();
+        if (!confirm(I18N.deleteGroupConfirm.replace('{0}', g.name))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/iam/groups/' + encodeURIComponent(g.id));
+        if (!ok) { showError(data.message || I18N.deleteFailed); return; }
+        closeMembers();
+        loadGroups();
+    }
+
+    let activeGroupId = null;
+
+    async function openMembers(g) {
+        clearError();
+        activeGroupId = g.id;
+        document.getElementById('member-heading').textContent = g.name;
+        document.getElementById('member-panel').classList.remove('hidden');
+        await loadMembers();
+    }
+
+    function closeMembers() {
+        activeGroupId = null;
+        document.getElementById('member-panel').classList.add('hidden');
+    }
+
+    async function loadMembers() {
+        const {ok, data} = await api('GET', '/api/admin/iam/groups/' + encodeURIComponent(activeGroupId) + '/members');
+        if (!ok) return;
+        const container = document.getElementById('member-list');
+        container.innerHTML = '';
+        data.forEach(m => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;';
+            const label = document.createElement('span');
+            label.textContent = (m.email || m.userId);
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'link';
+            remove.style.cssText = 'background:none;border:none;';
+            remove.textContent = I18N.removeMember;
+            remove.onclick = () => removeMember(m.userId);
+            row.append(label, remove);
+            container.appendChild(row);
+        });
+    }
+
+    async function addMember() {
+        clearError();
+        const userId = trimmed('member-user');
+        if (!userId) return;
+        const {ok, data} = await api('POST', '/api/admin/iam/groups/' + encodeURIComponent(activeGroupId) + '/members', {userId});
+        if (!ok) { showError(data.message || I18N.memberFailed); return; }
+        document.getElementById('member-user').value = '';
+        await loadMembers();
+        loadGroups();
+    }
+
+    async function removeMember(userId) {
+        clearError();
+        const {ok, data} = await api('DELETE', '/api/admin/iam/groups/' + encodeURIComponent(activeGroupId) + '/members/' + encodeURIComponent(userId));
+        if (!ok) { showError(data.message || I18N.memberFailed); return; }
+        await loadMembers();
+        loadGroups();
+    }
+
+    // ── 시뮬레이터 ──
+    function toggleSubject() {
+        const m2m = document.getElementById('sim-subject').value === 'M2M';
+        document.getElementById('sim-m2m-fields').classList.toggle('hidden', !m2m);
+        document.getElementById('sim-session-fields').classList.toggle('hidden', m2m);
+    }
+
+    async function simulate() {
+        clearError();
+        const subjectType = document.getElementById('sim-subject').value;
+        const body = {
+            subjectType,
+            action: trimmed('sim-action'),
+            resource: trimmed('sim-resource'),
+        };
+        if (subjectType === 'SESSION') {
+            body.userId = trimmed('sim-user') || null;
+            body.orgId = trimmed('sim-org') || null;
+            body.stepUp = document.getElementById('sim-stepup').checked;
+        } else {
+            body.scopes = tokens('sim-scopes');
+            body.boundOrgs = tokens('sim-bound');
+            body.merchantId = trimmed('sim-merchant') || null;
+        }
+        const {ok, data} = await api('POST', '/api/admin/iam/simulate', body);
+        const result = document.getElementById('sim-result');
+        if (!ok) { showError(data.message || I18N.simulateFailed); result.classList.add('hidden'); return; }
+        const allowed = data.effect === 'ALLOW';
+        result.className = 'alert ' + (allowed ? 'alert-info' : 'alert-error');
+        result.textContent = (allowed ? I18N.allow : I18N.deny) + ' — ' + data.reason + (data.matchedSid ? ' (Sid: ' + data.matchedSid + ')' : '');
+        result.classList.remove('hidden');
+    }
+
+    loadPolicies();
+    loadGroups();
+    toggleSubject();
+</script>
+</body>
+</html>

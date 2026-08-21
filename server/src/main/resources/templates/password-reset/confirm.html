@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{passwordReset.confirm.title}">Set a new password · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{passwordReset.confirm.heading}">Set a new password</h1>
+    <p class="auth-subtitle" th:text="#{passwordReset.confirm.subtitle}">Enter a new password</p>
+
+    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+    <form method="post" action="/password-reset/confirm">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <input type="hidden" name="token" th:value="${token}">
+        <div class="field">
+            <label for="newPassword" th:text="#{common.newPassword}">New password</label>
+            <input type="password" id="newPassword" name="newPassword" autofocus required>
+        </div>
+        <p class="hint" th:text="#{common.passwordHint}">At least 12 characters</p>
+        <div class="actions end">
+            <button type="submit" class="btn-primary" th:text="#{common.changePassword}">Change password</button>
+        </div>
+    </form>
+    <!--
+      ★탈출구가 하나도 없었다. 링크가 만료됐다는 오류를 본 사용자가 새 링크를 요청하려면
+      /password-reset 를 **직접 타이핑**해야 했다 — 화면이 막다른 길이면 오류 문구를 고쳐도 소용없다.
+    -->
+    <div class="stack-links">
+        <a class="link" href="/password-reset" th:text="#{passwordReset.confirm.requestAgain}">Request a new link</a>
+        <a class="link link-muted" href="/login" th:text="#{passwordReset.confirm.backToLogin}">Back to sign in</a>
+    </div>
+</main>
+</body>
+</html>

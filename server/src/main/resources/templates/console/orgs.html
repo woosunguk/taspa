@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{console.orgs.title}">My organizations · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{console.orgs.brand}">Organization Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="error" class="alert alert-error hidden"></div>
+    <div id="success" class="alert alert-info hidden"></div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{console.orgs.listHeading}">Organizations I manage</h2>
+    <div id="org-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.empty}">You do not manage any organizations</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{console.orgs.col.name}">Name</th>
+                <th>slug</th>
+                <th th:text="#{console.orgs.col.status}">Status</th>
+                <th th:text="#{console.orgs.col.members}">Members</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="org-list"></tbody>
+        </table>
+    </div>
+
+    <!-- 상세 -->
+    <div id="detail-panel" class="hidden">
+        <hr class="divider">
+        <h2 class="auth-title" style="font-size:18px;" id="detail-title" th:text="#{console.orgs.detail.heading}">Organization detail</h2>
+
+        <!-- 개요(대시보드) — GET /api/orgs/{orgId}/dashboard 읽기전용 집계(활성 멤버십 기준). -->
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{console.orgs.dash.heading}">Overview</h3>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <div class="num" id="dash-members">0</div>
+                <div class="label" th:text="#{console.orgs.dash.stat.members}">Total members</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="dash-invites">0</div>
+                <div class="label" th:text="#{console.orgs.dash.stat.pendingInvites}">Pending invitations</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="dash-joins">0</div>
+                <div class="label" th:text="#{console.orgs.dash.stat.recentJoins}">Joined (30 days)</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="dash-sitecount">0</div>
+                <div class="label" th:text="#{console.orgs.dash.stat.sites}">Sites</div>
+            </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:8px;">
+            <div style="flex:1;min-width:160px;">
+                <div class="hint" style="margin:0 0 4px;" th:text="#{console.orgs.dash.byRole}">By role</div>
+                <table class="admin-table"><tbody id="dash-role-list"></tbody></table>
+            </div>
+            <div style="flex:1;min-width:160px;">
+                <div class="hint" style="margin:0 0 4px;" th:text="#{console.orgs.dash.byEmploymentStatus}">By employment status</div>
+                <table class="admin-table"><tbody id="dash-empstatus-list"></tbody></table>
+            </div>
+            <div style="flex:1;min-width:160px;">
+                <div class="hint" style="margin:0 0 4px;" th:text="#{console.orgs.dash.byEmploymentType}">By employment type</div>
+                <table class="admin-table"><tbody id="dash-emptype-list"></tbody></table>
+            </div>
+        </div>
+        <div class="hint" style="margin:16px 0 4px;" th:text="#{console.orgs.dash.byDepartment}">Members by department</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.dash.col.dept}">Department</th>
+                    <th th:text="#{console.orgs.dash.col.direct}">Direct</th>
+                    <th th:text="#{console.orgs.dash.col.rollup}">Incl. sub-departments</th>
+                </tr>
+                </thead>
+                <tbody id="dash-dept-list"></tbody>
+            </table>
+        </div>
+        <div class="hint" style="margin:16px 0 4px;" th:text="#{console.orgs.dash.bySite}">Members by site</div>
+        <div class="table-wrap">
+            <table class="admin-table"><tbody id="dash-site-list"></tbody></table>
+        </div>
+
+        <!-- 설정(프로필) — 이름·타임존만 편집. status·slug 는 이 폼으로 바꿀 수 없다(플랫폼 관리자 전용). -->
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{console.orgs.profile.heading}">Organization settings</h3>
+        <div class="field">
+            <label for="profile-name" th:text="#{console.orgs.profile.nameLabel}">Organization name</label>
+            <input type="text" id="profile-name" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="profile-timezone" th:text="#{console.orgs.profile.tzLabel}">Timezone</label>
+            <input type="text" id="profile-timezone" autocomplete="off" placeholder="Asia/Seoul">
+            <div class="hint" style="margin-top:4px;" th:text="#{console.orgs.profile.tzHint}">IANA zone name</div>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="saveProfile()" th:text="#{console.orgs.profile.save}">Save</button>
+        </div>
+
+        <!-- 이메일 도메인 자동 가입 — 검증된 도메인 + opt-in ON 일 때만 이메일 인증 성공 시 MEMBER 자동 가입 -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.domains.heading}">Email domain auto-join</h3>
+        <div class="check-row">
+            <label><input type="checkbox" id="autojoin-toggle" onchange="toggleAutoJoin(this)"> <span th:text="#{console.orgs.domains.autoJoinLabel}">Automatically add verified-domain signups as members</span></label>
+        </div>
+        <div class="hint" style="margin:4px 0 8px;" th:text="#{console.orgs.domains.autoJoinHint}">Only verified domains apply. New members always join with the Member role.</div>
+        <div id="domain-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.domains.empty}">No domains registered</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.domains.col.domain}">Domain</th>
+                    <th th:text="#{console.orgs.domains.col.status}">Status</th>
+                    <th th:text="#{console.orgs.domains.col.txt}">DNS TXT record</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="domain-list"></tbody>
+            </table>
+        </div>
+        <div class="field" style="margin-top:12px;">
+            <label for="domain-name" th:text="#{console.orgs.domains.nameLabel}">Domain (e.g. acme.com)</label>
+            <input type="text" id="domain-name" autocomplete="off" placeholder="acme.com">
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="addDomain()" th:text="#{console.orgs.domains.add}">Add domain</button>
+        </div>
+
+        <!-- 부서(조직도) — flat 응답을 parentId 로 트리 구성해 들여쓰기 렌더 -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.dept.heading}">Departments</h3>
+        <div id="dept-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.dept.empty}">No departments</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <tbody id="dept-list"></tbody>
+            </table>
+        </div>
+        <div class="field" style="margin-top:12px;">
+            <label for="dept-name" th:text="#{console.orgs.dept.nameLabel}">Department name</label>
+            <input type="text" id="dept-name" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="dept-parent" th:text="#{console.orgs.dept.parentLabel}">Parent department</label>
+            <select id="dept-parent"></select>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="createDept()" th:text="#{console.orgs.dept.create}">Add department</button>
+        </div>
+
+        <!-- 사업장(사이트) -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.site.heading}">Sites</h3>
+        <div id="site-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.site.empty}">No sites</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.site.col.name}">Name</th>
+                    <th th:text="#{console.orgs.site.col.address}">Address</th>
+                    <th th:text="#{console.orgs.site.col.tz}">Timezone</th>
+                    <th th:text="#{console.orgs.site.col.members}">Members</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="site-list"></tbody>
+            </table>
+        </div>
+        <div class="field" style="margin-top:12px;">
+            <label for="site-name" th:text="#{console.orgs.site.nameLabel}">Site name</label>
+            <input type="text" id="site-name" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="site-address" th:text="#{console.orgs.site.addressLabel}">Address (optional)</label>
+            <input type="text" id="site-address" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="site-timezone" th:text="#{console.orgs.site.tzLabel}">Timezone</label>
+            <input type="text" id="site-timezone" autocomplete="off" placeholder="Asia/Seoul">
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="createSite()" th:text="#{console.orgs.site.create}">Add site</button>
+        </div>
+
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.member.heading}">Members</h3>
+        <div id="member-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.member.empty}">No members</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.member.col.email}">Email</th>
+                    <th th:text="#{console.orgs.member.col.role}">Role</th>
+                    <th th:text="#{console.orgs.member.col.hr}">HR</th>
+                    <th th:text="#{console.orgs.member.col.dept}">Department</th>
+                    <th th:text="#{console.orgs.assign.dept}">Assigned dept</th>
+                    <th th:text="#{console.orgs.assign.site}">Site</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="member-list"></tbody>
+            </table>
+        </div>
+
+        <!-- 초대 -->
+        <h3 class="hint" style="margin:16px 0 4px;" th:text="#{console.orgs.invite.heading}">Invitations</h3>
+        <div id="invite-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.invite.empty}">No pending invitations</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.invite.col.email}">Email</th>
+                    <th th:text="#{console.orgs.invite.col.role}">Role</th>
+                    <th th:text="#{console.orgs.invite.col.dept}">Department</th>
+                    <th th:text="#{console.orgs.invite.col.expires}">Expires</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="invite-list"></tbody>
+            </table>
+        </div>
+
+        <div class="field" style="margin-top:16px;">
+            <label for="invite-email" th:text="#{console.orgs.invite.emailLabel}">Email to invite</label>
+            <input type="email" id="invite-email" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="invite-dept" th:text="#{console.orgs.invite.deptLabel}">Department (optional)</label>
+            <input type="text" id="invite-dept" autocomplete="off">
+        </div>
+        <div class="check-row">
+            <label><input type="radio" name="invite-role" value="MEMBER" checked> <span th:text="#{console.orgs.role.member}">Member</span></label>
+            <label><input type="radio" name="invite-role" value="ORG_ADMIN"> <span th:text="#{console.orgs.role.orgAdmin}">Org admin</span></label>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-secondary" onclick="sendInvite()" th:text="#{console.orgs.invite.send}">Send invitation</button>
+        </div>
+
+        <!-- CSV 대량 초대 — 각 행이 단건 초대 API 와 같은 가드(상한·쿨다운·열거 저항)를 타고, 행별 결과를 보고한다. -->
+        <details style="margin-top:16px;">
+            <summary class="hint" style="cursor:pointer;" th:text="#{console.orgs.bulk.heading}">Bulk invite via CSV</summary>
+            <div class="hint" style="margin:8px 0;" th:text="#{console.orgs.bulk.hint}">Format: email,role,department</div>
+            <div class="field">
+                <label for="bulk-csv" th:text="#{console.orgs.bulk.csvLabel}">Paste CSV</label>
+                <textarea id="bulk-csv" rows="6" style="width:100%;font-family:monospace;" placeholder="email,role,department"></textarea>
+            </div>
+            <div class="field">
+                <label for="bulk-file" th:text="#{console.orgs.bulk.fileLabel}">Or choose a CSV file</label>
+                <input type="file" id="bulk-file" accept=".csv,text/csv,text/plain" onchange="readBulkFile(this)">
+            </div>
+            <div class="actions end">
+                <button type="button" class="btn-secondary" onclick="sendBulkInvites()" th:text="#{console.orgs.bulk.send}">Send bulk invitations</button>
+            </div>
+            <div id="bulk-result" class="hidden">
+                <div id="bulk-summary" class="alert alert-info" style="margin:8px 0;"></div>
+                <div class="table-wrap" id="bulk-rejected-wrap">
+                    <table class="admin-table">
+                        <thead>
+                        <tr>
+                            <th th:text="#{console.orgs.bulk.col.line}">Line</th>
+                            <th th:text="#{console.orgs.bulk.col.email}">Email</th>
+                            <th th:text="#{console.orgs.bulk.col.reason}">Reason</th>
+                        </tr>
+                        </thead>
+                        <tbody id="bulk-rejected-list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <!-- 식수 예측 — GET /api/orgs/{orgId}/forecast (읽기전용, 집계 파생값만) -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.forecast.heading}">Meal forecast</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div class="field" style="margin:0;">
+                <label for="fc-from" th:text="#{console.orgs.forecast.fromLabel}">From</label>
+                <input type="date" id="fc-from">
+            </div>
+            <div class="field" style="margin:0;">
+                <label for="fc-to" th:text="#{console.orgs.forecast.toLabel}">To</label>
+                <input type="date" id="fc-to">
+            </div>
+            <div class="field" style="margin:0;">
+                <label for="fc-site" th:text="#{console.orgs.forecast.siteLabel}">Site</label>
+                <select id="fc-site"></select>
+            </div>
+            <div class="field" style="margin:0;">
+                <label for="fc-window" th:text="#{console.orgs.forecast.windowLabel}">Meal window</label>
+                <select id="fc-window">
+                    <option value="" th:text="#{console.orgs.forecast.allWindows}">All</option>
+                    <option value="BREAKFAST" th:text="#{meal.window.BREAKFAST}">Breakfast</option>
+                    <option value="LUNCH" th:text="#{meal.window.LUNCH}">Lunch</option>
+                    <option value="DINNER" th:text="#{meal.window.DINNER}">Dinner</option>
+                </select>
+            </div>
+            <button type="button" class="btn-secondary" style="width:auto;" onclick="loadForecast()" th:text="#{console.orgs.forecast.load}">Load forecast</button>
+        </div>
+        <div id="fc-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.forecast.empty}">No forecast cells</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.forecast.col.date}">Date</th>
+                    <th th:text="#{console.orgs.forecast.col.site}">Site</th>
+                    <th th:text="#{console.orgs.forecast.col.window}">Meal window</th>
+                    <th th:text="#{console.orgs.forecast.col.predicted}">Predicted</th>
+                    <th th:text="#{console.orgs.forecast.col.method}">Method</th>
+                    <th th:text="#{console.orgs.forecast.col.basis}">Last week actual</th>
+                </tr>
+                </thead>
+                <tbody id="fc-list"></tbody>
+            </table>
+        </div>
+        <!-- 백테스트(보조) — 접이식, 요약 지표(MAPE/WAPE/bias)만 표시 -->
+        <details style="margin-top:8px;">
+            <summary class="hint" style="cursor:pointer;" th:text="#{console.orgs.forecast.backtest.heading}">Backtest (accuracy check)</summary>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:8px;">
+                <div class="field" style="margin:0;">
+                    <label for="bt-from" th:text="#{console.orgs.forecast.fromLabel}">From</label>
+                    <input type="date" id="bt-from">
+                </div>
+                <div class="field" style="margin:0;">
+                    <label for="bt-to" th:text="#{console.orgs.forecast.toLabel}">To</label>
+                    <input type="date" id="bt-to">
+                </div>
+                <button type="button" class="btn-secondary" style="width:auto;" onclick="runBacktest()" th:text="#{console.orgs.forecast.backtest.run}">Run backtest</button>
+            </div>
+            <div id="bt-summary" class="hint" style="margin-top:8px;"></div>
+        </details>
+
+        <!-- 청구서 — /api/orgs/{orgId}/invoices (generate·finalize 는 step-up + CSRF) -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.invoice.heading}">Invoices</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div class="field" style="margin:0;">
+                <label for="inv-period" th:text="#{console.orgs.invoice.periodLabel}">Billing month</label>
+                <input type="month" id="inv-period">
+            </div>
+            <button type="button" class="btn-secondary" style="width:auto;" onclick="generateInvoice()" th:text="#{console.orgs.invoice.generate}">Generate / regenerate</button>
+        </div>
+        <div id="inv-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.invoice.empty}">No invoices</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.invoice.col.period}">Period</th>
+                    <th th:text="#{console.orgs.invoice.col.status}">Status</th>
+                    <th th:text="#{console.orgs.invoice.col.subtotal}">Subtotal</th>
+                    <th th:text="#{console.orgs.invoice.col.count}">Transactions</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="inv-list"></tbody>
+            </table>
+        </div>
+        <div id="inv-detail" class="hidden" style="margin-top:12px;">
+            <div class="hint" id="inv-detail-title" style="margin:0 0 4px;"></div>
+            <div class="hint" style="margin:8px 0 4px;" th:text="#{console.orgs.invoice.deptHeading}">Department subtotals</div>
+            <div class="table-wrap">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{console.orgs.invoice.col.dept}">Department</th>
+                        <th th:text="#{console.orgs.invoice.col.lineCount}">Count</th>
+                        <th th:text="#{console.orgs.invoice.col.amount}">Amount</th>
+                    </tr>
+                    </thead>
+                    <tbody id="inv-dept-list"></tbody>
+                </table>
+            </div>
+            <div class="hint" style="margin:8px 0 4px;" th:text="#{console.orgs.invoice.lineHeading}">Per-user lines</div>
+            <div class="table-wrap">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th th:text="#{console.orgs.invoice.col.email}">Email</th>
+                        <th th:text="#{console.orgs.invoice.col.lineCount}">Count</th>
+                        <th th:text="#{console.orgs.invoice.col.amount}">Amount</th>
+                    </tr>
+                    </thead>
+                    <tbody id="inv-line-list"></tbody>
+                </table>
+            </div>
+            <div class="actions end">
+                <button type="button" class="link" style="background:none;border:none;" onclick="closeInvoiceDetail()" th:text="#{console.orgs.attrs.close}">Close</button>
+            </div>
+        </div>
+
+        <!-- 활동 로그 -->
+        <h3 class="hint" style="margin:24px 0 4px;" th:text="#{console.orgs.audit.heading}">Activity log</h3>
+        <div id="audit-empty" class="hint hidden" style="margin-top:8px;" th:text="#{console.orgs.audit.empty}">No activity yet</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{console.orgs.audit.col.time}">Time</th>
+                    <th th:text="#{console.orgs.audit.col.type}">Type</th>
+                    <th th:text="#{console.orgs.audit.col.actor}">Actor</th>
+                </tr>
+                </thead>
+                <tbody id="audit-list"></tbody>
+            </table>
+        </div>
+        <div class="actions end">
+            <button type="button" id="audit-more" class="link hidden" onclick="loadMoreAudit()" th:text="#{console.orgs.audit.more}">Load more</button>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        statusActive: [[#{console.orgs.status.active}]],
+        statusSuspended: [[#{console.orgs.status.suspended}]],
+        manage: [[#{console.orgs.action.manage}]],
+        roleMember: [[#{console.orgs.role.member}]],
+        roleOrgAdmin: [[#{console.orgs.role.orgAdmin}]],
+        makeAdmin: [[#{console.orgs.member.makeAdmin}]],
+        makeMember: [[#{console.orgs.member.makeMember}]],
+        remove: [[#{console.orgs.member.remove}]],
+        removeConfirm: [[#{console.orgs.member.removeConfirm}]],
+        detailTitle: [[#{console.orgs.detail.titleTpl}]],
+        loadFailed: [[#{console.orgs.js.loadFailed}]],
+        roleFailed: [[#{console.orgs.js.roleFailed}]],
+        removeFailed: [[#{console.orgs.js.removeFailed}]],
+        profileSaved: [[#{console.orgs.profile.js.saved}]],
+        profileSaveFailed: [[#{console.orgs.profile.js.saveFailed}]],
+        inviteRevoke: [[#{console.orgs.invite.revoke}]],
+        inviteResend: [[#{console.orgs.invite.resend}]],
+        inviteRevokeConfirm: [[#{console.orgs.invite.revokeConfirm}]],
+        inviteLoadFailed: [[#{console.orgs.invite.js.loadFailed}]],
+        inviteSendFailed: [[#{console.orgs.invite.js.sendFailed}]],
+        inviteRevokeFailed: [[#{console.orgs.invite.js.revokeFailed}]],
+        inviteResent: [[#{console.orgs.invite.js.resent}]],
+        inviteResendFailed: [[#{console.orgs.invite.js.resendFailed}]],
+        bulkResult: [[#{console.orgs.bulk.result}]],
+        bulkFailed: [[#{console.orgs.bulk.js.failed}]],
+        auditLoadFailed: [[#{console.orgs.audit.js.loadFailed}]],
+        auditPlatformActor: [[#{console.orgs.audit.actor.platform}]],
+        auditTypes: {
+            ADMIN_ORG_UPDATED: [[#{console.orgs.audit.type.ADMIN_ORG_UPDATED}]],
+            ADMIN_ORG_CREATED: [[#{console.orgs.audit.type.ADMIN_ORG_CREATED}]],
+            ADMIN_ORG_MEMBER_UPSERTED: [[#{console.orgs.audit.type.ADMIN_ORG_MEMBER_UPSERTED}]],
+            ADMIN_ORG_MEMBER_ROLE_CHANGED: [[#{console.orgs.audit.type.ADMIN_ORG_MEMBER_ROLE_CHANGED}]],
+            ADMIN_ORG_MEMBER_REMOVED: [[#{console.orgs.audit.type.ADMIN_ORG_MEMBER_REMOVED}]],
+            ADMIN_ORG_SSO_LINKED: [[#{console.orgs.audit.type.ADMIN_ORG_SSO_LINKED}]],
+            ORG_INVITE_CREATED: [[#{console.orgs.audit.type.ORG_INVITE_CREATED}]],
+            ORG_INVITE_ACCEPTED: [[#{console.orgs.audit.type.ORG_INVITE_ACCEPTED}]],
+            ORG_INVITE_REVOKED: [[#{console.orgs.audit.type.ORG_INVITE_REVOKED}]],
+            ORG_INVITE_RESENT: [[#{console.orgs.audit.type.ORG_INVITE_RESENT}]],
+            ORG_INVITE_BULK: [[#{console.orgs.audit.type.ORG_INVITE_BULK}]],
+            ADMIN_ORG_DEPARTMENT_CREATED: [[#{console.orgs.audit.type.ADMIN_ORG_DEPARTMENT_CREATED}]],
+            ADMIN_ORG_DEPARTMENT_RENAMED: [[#{console.orgs.audit.type.ADMIN_ORG_DEPARTMENT_RENAMED}]],
+            ADMIN_ORG_DEPARTMENT_DELETED: [[#{console.orgs.audit.type.ADMIN_ORG_DEPARTMENT_DELETED}]],
+            ADMIN_ORG_SITE_CREATED: [[#{console.orgs.audit.type.ADMIN_ORG_SITE_CREATED}]],
+            ADMIN_ORG_SITE_UPDATED: [[#{console.orgs.audit.type.ADMIN_ORG_SITE_UPDATED}]],
+            ADMIN_ORG_SITE_DELETED: [[#{console.orgs.audit.type.ADMIN_ORG_SITE_DELETED}]],
+            ADMIN_ORG_MEMBER_ASSIGNED: [[#{console.orgs.audit.type.ADMIN_ORG_MEMBER_ASSIGNED}]],
+            ADMIN_ORG_MEMBER_ATTRS_UPDATED: [[#{console.orgs.audit.type.ADMIN_ORG_MEMBER_ATTRS_UPDATED}]],
+            ORG_DOMAIN_ADDED: [[#{console.orgs.audit.type.ORG_DOMAIN_ADDED}]],
+            ORG_DOMAIN_VERIFIED: [[#{console.orgs.audit.type.ORG_DOMAIN_VERIFIED}]],
+            ORG_DOMAIN_FORCE_VERIFIED: [[#{console.orgs.audit.type.ORG_DOMAIN_FORCE_VERIFIED}]],
+            ORG_DOMAIN_UNVERIFIED: [[#{console.orgs.audit.type.ORG_DOMAIN_UNVERIFIED}]],
+            ORG_DOMAIN_REMOVED: [[#{console.orgs.audit.type.ORG_DOMAIN_REMOVED}]],
+            ORG_AUTO_JOIN_TOGGLED: [[#{console.orgs.audit.type.ORG_AUTO_JOIN_TOGGLED}]],
+            ORG_AUTO_JOINED: [[#{console.orgs.audit.type.ORG_AUTO_JOINED}]],
+        },
+        domainVerifiedBadge: [[#{console.orgs.domains.status.verified}]],
+        domainPendingBadge: [[#{console.orgs.domains.status.pending}]],
+        domainVerify: [[#{console.orgs.domains.verify}]],
+        domainDelete: [[#{console.orgs.domains.delete}]],
+        domainDeleteConfirm: [[#{console.orgs.domains.deleteConfirm}]],
+        domainLoadFailed: [[#{console.orgs.domains.js.loadFailed}]],
+        domainAddFailed: [[#{console.orgs.domains.js.addFailed}]],
+        domainVerifyFailed: [[#{console.orgs.domains.js.verifyFailed}]],
+        domainVerifiedMsg: [[#{console.orgs.domains.js.verified}]],
+        domainDeleteFailed: [[#{console.orgs.domains.js.deleteFailed}]],
+        autoJoinSaved: [[#{console.orgs.domains.js.autoJoinSaved}]],
+        autoJoinFailed: [[#{console.orgs.domains.js.autoJoinFailed}]],
+        deptMembers: [[#{console.orgs.dept.members}]],
+        deptRename: [[#{console.orgs.dept.rename}]],
+        deptDelete: [[#{console.orgs.dept.delete}]],
+        deptParentRoot: [[#{console.orgs.dept.parentRoot}]],
+        deptRenamePrompt: [[#{console.orgs.dept.renamePrompt}]],
+        deptDeleteConfirm: [[#{console.orgs.dept.deleteConfirm}]],
+        deptLoadFailed: [[#{console.orgs.dept.js.loadFailed}]],
+        deptCreateFailed: [[#{console.orgs.dept.js.createFailed}]],
+        deptRenameFailed: [[#{console.orgs.dept.js.renameFailed}]],
+        deptDeleteFailed: [[#{console.orgs.dept.js.deleteFailed}]],
+        siteEdit: [[#{console.orgs.site.edit}]],
+        siteDelete: [[#{console.orgs.site.delete}]],
+        siteEditNamePrompt: [[#{console.orgs.site.editNamePrompt}]],
+        siteEditAddressPrompt: [[#{console.orgs.site.editAddressPrompt}]],
+        siteEditTzPrompt: [[#{console.orgs.site.editTzPrompt}]],
+        siteDeleteConfirm: [[#{console.orgs.site.deleteConfirm}]],
+        siteLoadFailed: [[#{console.orgs.site.js.loadFailed}]],
+        siteCreateFailed: [[#{console.orgs.site.js.createFailed}]],
+        siteUpdateFailed: [[#{console.orgs.site.js.updateFailed}]],
+        siteDeleteFailed: [[#{console.orgs.site.js.deleteFailed}]],
+        assignNone: [[#{console.orgs.assign.none}]],
+        assignDept: [[#{console.orgs.assign.dept}]],
+        assignSite: [[#{console.orgs.assign.site}]],
+        assignFailed: [[#{console.orgs.assign.js.failed}]],
+        attrsEdit: [[#{console.orgs.member.attrs}]],
+        historyBtn: [[#{console.orgs.member.history}]],
+        attrsHeading: [[#{console.orgs.attrs.heading}]],
+        attrsEmployeeId: [[#{console.orgs.attrs.employeeId}]],
+        attrsJobTitle: [[#{console.orgs.attrs.jobTitle}]],
+        attrsEmploymentType: [[#{console.orgs.attrs.employmentType}]],
+        attrsHireDate: [[#{console.orgs.attrs.hireDate}]],
+        attrsEmploymentStatus: [[#{console.orgs.attrs.employmentStatus}]],
+        attrsTypeNone: [[#{console.orgs.attrs.typeNone}]],
+        attrsClearHint: [[#{console.orgs.attrs.clearHint}]],
+        attrsSave: [[#{console.orgs.attrs.save}]],
+        attrsClose: [[#{console.orgs.attrs.close}]],
+        attrsSaved: [[#{console.orgs.attrs.js.saved}]],
+        attrsSaveFailed: [[#{console.orgs.attrs.js.saveFailed}]],
+        historyHeading: [[#{console.orgs.history.heading}]],
+        historyEmpty: [[#{console.orgs.history.empty}]],
+        historyLoadFailed: [[#{console.orgs.history.js.loadFailed}]],
+        historyColTime: [[#{console.orgs.history.col.time}]],
+        historyColChange: [[#{console.orgs.history.col.change}]],
+        historyColRole: [[#{console.orgs.history.col.role}]],
+        historyColStatus: [[#{console.orgs.history.col.status}]],
+        historyColTitle: [[#{console.orgs.history.col.jobTitle}]],
+        historyChanges: {
+            JOINED: [[#{console.orgs.history.change.JOINED}]],
+            ROLE_CHANGED: [[#{console.orgs.history.change.ROLE_CHANGED}]],
+            ASSIGNED: [[#{console.orgs.history.change.ASSIGNED}]],
+            ATTRIBUTES_UPDATED: [[#{console.orgs.history.change.ATTRIBUTES_UPDATED}]],
+            REMOVED: [[#{console.orgs.history.change.REMOVED}]],
+        },
+        employmentTypes: {
+            FULL_TIME: [[#{console.orgs.employment.type.FULL_TIME}]],
+            PART_TIME: [[#{console.orgs.employment.type.PART_TIME}]],
+            CONTRACT: [[#{console.orgs.employment.type.CONTRACT}]],
+            INTERN: [[#{console.orgs.employment.type.INTERN}]],
+        },
+        employmentStatuses: {
+            EMPLOYED: [[#{console.orgs.employment.status.EMPLOYED}]],
+            ON_LEAVE: [[#{console.orgs.employment.status.ON_LEAVE}]],
+            TERMINATED: [[#{console.orgs.employment.status.TERMINATED}]],
+        },
+        dashLoadFailed: [[#{console.orgs.dash.js.loadFailed}]],
+        dashUnassigned: [[#{console.orgs.dash.unassigned}]],
+        dashTypeUnspecified: [[#{console.orgs.dash.typeUnspecified}]],
+        forecastAllSites: [[#{console.orgs.forecast.allSites}]],
+        forecastOrgWide: [[#{console.orgs.forecast.orgWide}]],
+        forecastNoData: [[#{console.orgs.forecast.noData}]],
+        forecastLoadFailed: [[#{console.orgs.forecast.js.loadFailed}]],
+        forecastMethods: {
+            SEASONAL_NAIVE_ADJUSTED: [[#{console.orgs.forecast.method.SEASONAL_NAIVE_ADJUSTED}]],
+            SEASONAL_NAIVE: [[#{console.orgs.forecast.method.SEASONAL_NAIVE}]],
+            FOUR_WEEK_AVG: [[#{console.orgs.forecast.method.FOUR_WEEK_AVG}]],
+            NO_DATA: [[#{console.orgs.forecast.method.NO_DATA}]],
+        },
+        mealWindows: {
+            BREAKFAST: [[#{meal.window.BREAKFAST}]],
+            LUNCH: [[#{meal.window.LUNCH}]],
+            DINNER: [[#{meal.window.DINNER}]],
+        },
+        backtestSummary: [[#{console.orgs.forecast.backtest.summary}]],
+        backtestFailed: [[#{console.orgs.forecast.backtest.js.failed}]],
+        invoiceStatuses: {
+            DRAFT: [[#{console.orgs.invoice.status.DRAFT}]],
+            FINALIZED: [[#{console.orgs.invoice.status.FINALIZED}]],
+        },
+        invoiceDetail: [[#{console.orgs.invoice.detail}]],
+        invoiceFinalize: [[#{console.orgs.invoice.finalize}]],
+        invoiceFinalizeConfirm: [[#{console.orgs.invoice.finalizeConfirm}]],
+        invoiceDetailTitle: [[#{console.orgs.invoice.detailTitleTpl}]],
+        invoiceGenerated: [[#{console.orgs.invoice.js.generated}]],
+        invoiceFinalized: [[#{console.orgs.invoice.js.finalized}]],
+        invoiceLoadFailed: [[#{console.orgs.invoice.js.loadFailed}]],
+        invoiceGenerateFailed: [[#{console.orgs.invoice.js.generateFailed}]],
+        invoiceDetailFailed: [[#{console.orgs.invoice.js.detailFailed}]],
+        invoiceFinalizeFailed: [[#{console.orgs.invoice.js.finalizeFailed}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/console/orgs');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(m) { const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); document.getElementById('success').classList.add('hidden'); }
+    function clearError() { document.getElementById('error').classList.add('hidden'); }
+    function showSuccess(m) { const el = document.getElementById('success'); el.textContent = m; el.classList.remove('hidden'); document.getElementById('error').classList.add('hidden'); }
+    function clearSuccess() { document.getElementById('success').classList.add('hidden'); }
+    function cell(text, mono) { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; }
+    function linkBtn(text, onclick) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'link'; b.style.cssText = 'background:none;border:none;margin-right:8px;';
+        b.textContent = text; b.onclick = onclick; return b;
+    }
+
+    let orgs = [];
+    let selectedOrg = null;
+    let departments = [];
+    let sites = [];
+
+    function renderOrgs() {
+        const tbody = document.getElementById('org-list');
+        tbody.innerHTML = '';
+        document.getElementById('org-empty').classList.toggle('hidden', orgs.length > 0);
+        orgs.forEach(o => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(o.name));
+            tr.appendChild(cell(o.slug, true));
+            tr.appendChild(cell(o.status === 'ACTIVE' ? I18N.statusActive : I18N.statusSuspended));
+            tr.appendChild(cell(String(o.memberCount)));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.manage, () => openDetail(o.id)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadOrgs() {
+        const {ok, data} = await api('GET', '/api/orgs/mine');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        orgs = data;
+        renderOrgs();
+    }
+
+    async function openDetail(id) {
+        clearError();
+        selectedOrg = id;
+        const org = orgs.find(o => o.id === id);
+        document.getElementById('detail-panel').classList.remove('hidden');
+        document.getElementById('detail-title').textContent = I18N.detailTitle.replace('{0}', org ? org.name : id);
+        // 프로필 폼을 현재값으로 프리필(AdministeredOrgView 에 name·timezone 포함).
+        document.getElementById('profile-name').value = org ? org.name : '';
+        document.getElementById('profile-timezone').value = org && org.timezone ? org.timezone : '';
+        // 사업장 생성 폼의 타임존은 org 타임존으로 프리필한다.
+        prefillSiteTimezone();
+        // 이전 조직의 bulk 초대 결과·입력이 새 조직 화면에 잔류하지 않게 리셋한다(오독·오발송 방지).
+        document.getElementById('bulk-result').classList.add('hidden');
+        document.getElementById('bulk-rejected-list').innerHTML = '';
+        const bulkCsv = document.getElementById('bulk-csv');
+        bulkCsv.value = '';
+        bulkCsv.closest('details').open = false;
+        // departments·sites 를 멤버보다 먼저 로드해야 멤버 배정 select 옵션·id→name 매핑이 준비된다.
+        await Promise.all([loadDepartments(id), loadSites(id)]);
+        // 예측/청구서 섹션은 sites 로드 후 초기화한다(사업장 select·기본 기간 프리필).
+        resetForecastSection();
+        resetInvoiceSection();
+        await Promise.all([loadDashboard(id), loadMembers(id), loadInvitations(id), loadDomains(id), resetAudit(id), loadInvoices(id)]);
+        document.getElementById('detail-panel').scrollIntoView({behavior: 'smooth'});
+    }
+
+    // ---- 개요(대시보드) — GET /api/orgs/{orgId}/dashboard (읽기전용 집계, 활성 멤버십 기준) ----
+
+    function renderCountRows(tbodyId, rows) {
+        const tbody = document.getElementById(tbodyId);
+        tbody.innerHTML = '';
+        rows.forEach(([label, n]) => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(label));
+            tr.appendChild(cell(String(n || 0)));
+            tbody.appendChild(tr);
+        });
+    }
+
+    /** 부서별 인원 — flat 응답을 buildDeptTree 로 들여쓰기 렌더, 직접/롤업 병기 + 미배정 행. */
+    function renderDashDepts(list, unassigned) {
+        const tbody = document.getElementById('dash-dept-list');
+        tbody.innerHTML = '';
+        const byId = new Map(list.map(d => [d.id, d]));
+        const roots = buildDeptTree(list.map(d => ({id: d.id, parentId: d.parentId, name: d.name, memberCount: d.directCount})));
+        const visited = new Set();
+        function row(name, depth, direct, rollup) {
+            const tr = document.createElement('tr');
+            const nameTd = cell((depth > 0 ? '└ ' : '') + name);
+            nameTd.style.paddingLeft = (depth * 20 + 8) + 'px';
+            tr.appendChild(nameTd);
+            tr.appendChild(cell(String(direct)));
+            tr.appendChild(cell(rollup == null ? '-' : String(rollup)));
+            tbody.appendChild(tr);
+        }
+        (function walk(nodes, depth) {
+            nodes.forEach(n => {
+                if (visited.has(n.id)) return; // 순환 방어
+                visited.add(n.id);
+                const src = byId.get(n.id);
+                row(n.name, depth, src ? src.directCount : 0, src ? src.rollupCount : 0);
+                if (n.children.length) walk(n.children, depth + 1);
+            });
+        })(roots, 0);
+        // 트리에서 누락된 노드(고아/사이클)도 평면 폴백으로 무손실 노출.
+        list.forEach(d => {
+            if (!visited.has(d.id)) { visited.add(d.id); row(d.name, 0, d.directCount, d.rollupCount); }
+        });
+        row(I18N.dashUnassigned, 0, unassigned, null);
+    }
+
+    function renderDashSites(list, unassigned) {
+        const tbody = document.getElementById('dash-site-list');
+        tbody.innerHTML = '';
+        const rows = list.map(s => [s.name, s.count]).concat([[I18N.dashUnassigned, unassigned]]);
+        rows.forEach(([name, n]) => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(name));
+            tr.appendChild(cell(String(n || 0)));
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadDashboard(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/dashboard');
+        if (!ok) { showError(I18N.dashLoadFailed); return; }
+        document.getElementById('dash-members').textContent = String(data.memberCount);
+        document.getElementById('dash-invites').textContent = String(data.pendingInvitations);
+        document.getElementById('dash-joins').textContent = String(data.recentJoins30d);
+        document.getElementById('dash-sitecount').textContent = String(data.siteCount);
+        renderCountRows('dash-role-list', [
+            [I18N.roleMember, data.byRole.MEMBER],
+            [I18N.roleOrgAdmin, data.byRole.ORG_ADMIN],
+        ]);
+        renderCountRows('dash-empstatus-list', ['EMPLOYED', 'ON_LEAVE', 'TERMINATED']
+            .map(k => [I18N.employmentStatuses[k], data.byEmploymentStatus[k]]));
+        renderCountRows('dash-emptype-list', ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN']
+            .map(k => [I18N.employmentTypes[k], data.byEmploymentType[k]])
+            .concat([[I18N.dashTypeUnspecified, data.byEmploymentType.UNSPECIFIED]]));
+        renderDashDepts(data.byDepartment, data.departmentUnassignedCount);
+        renderDashSites(data.bySite, data.siteUnassignedCount);
+    }
+
+    async function loadMembers(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/members');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        const tbody = document.getElementById('member-list');
+        // 재렌더로 열려 있는 속성 편집 패널의 미저장 입력이 소실되지 않게 캡처 후 복원한다.
+        const draft = captureAttrsDraft(tbody);
+        tbody.innerHTML = '';
+        document.getElementById('member-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(m => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(m.email || m.userId, true));
+            tr.appendChild(cell(m.role === 'ORG_ADMIN' ? I18N.roleOrgAdmin : I18N.roleMember));
+            tr.appendChild(hrSummaryCell(m));
+            tr.appendChild(cell(m.department || '-'));
+            // 구조적 배정(부서·사업장) — select 로 현재값 표시 + 변경. 값이 바뀌면 full-replace PUT(빈 값=해제).
+            const deptTd = document.createElement('td');
+            const siteTd = document.createElement('td');
+            const deptSel = assignSelect(departments, m.departmentId, () => applyAssignment(id, m.userId, deptSel, siteSel), I18N.assignDept);
+            const siteSel = assignSelect(sites, m.siteId, () => applyAssignment(id, m.userId, deptSel, siteSel), I18N.assignSite);
+            deptTd.appendChild(deptSel);
+            siteTd.appendChild(siteSel);
+            tr.appendChild(deptTd);
+            tr.appendChild(siteTd);
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            const isAdmin = m.role === 'ORG_ADMIN';
+            actions.appendChild(linkBtn(isAdmin ? I18N.makeMember : I18N.makeAdmin,
+                () => changeRole(id, m.userId, isAdmin ? 'MEMBER' : 'ORG_ADMIN')));
+            actions.appendChild(linkBtn(I18N.attrsEdit, () => toggleAttrsPanel(id, m, tr)));
+            actions.appendChild(linkBtn(I18N.historyBtn, () => toggleHistoryPanel(id, m, tr)));
+            actions.appendChild(linkBtn(I18N.remove, () => removeMember(id, m)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+            if (draft && draft.userId === m.userId) restoreAttrsDraft(id, m, tr, draft);
+        });
+    }
+
+    async function changeRole(id, userId, role) {
+        clearError();
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(userId) + '/role', {role});
+        if (reauth) return;
+        if (!ok) { showError(I18N.roleFailed); return; }
+        loadMembers(id);
+        loadDashboard(id);
+        loadOrgs();
+    }
+
+    async function removeMember(id, m) {
+        clearError();
+        if (!confirm(I18N.removeConfirm.replace('{0}', m.email || m.userId))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(m.userId));
+        if (reauth) return;
+        if (!ok) { showError(I18N.removeFailed); return; }
+        loadMembers(id);
+        loadDashboard(id);
+        loadOrgs();
+    }
+
+    // ---- 설정(프로필) — PUT /api/orgs/{orgId} (이름·타임존만; status·slug 는 서버가 무시) ----
+    async function saveProfile() {
+        clearError();
+        clearSuccess();
+        if (!selectedOrg) return;
+        const name = document.getElementById('profile-name').value.trim();
+        const timezone = document.getElementById('profile-timezone').value.trim();
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(selectedOrg), {name, timezone});
+        if (reauth) return;
+        // 잘못된 타임존·빈/과길이 이름 등 400 은 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.profileSaveFailed); return; }
+        // 목록·상세 제목을 갱신값으로 새로고침(프리필도 최신화된다).
+        await loadOrgs();
+        const org = orgs.find(o => o.id === selectedOrg);
+        if (org) {
+            document.getElementById('detail-title').textContent = I18N.detailTitle.replace('{0}', org.name);
+            // 프로필 폼을 실제 저장값으로 재동기화(빈 이름 거부·타임존 정규화 등으로 입력과 서버가 어긋나지 않게).
+            document.getElementById('profile-name').value = org.name;
+            document.getElementById('profile-timezone').value = org.timezone || '';
+        }
+        showSuccess(I18N.profileSaved);
+    }
+
+    // ---- 이메일 도메인 자동 가입 — /api/orgs/{orgId}/domains + PUT /api/orgs/{orgId}/auto-join ----
+
+    async function loadDomains(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/domains');
+        if (!ok) { showError(I18N.domainLoadFailed); return; }
+        document.getElementById('autojoin-toggle').checked = !!data.autoJoinEnabled;
+        const tbody = document.getElementById('domain-list');
+        tbody.innerHTML = '';
+        document.getElementById('domain-empty').classList.toggle('hidden', data.domains.length > 0);
+        data.domains.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(d.domain, true));
+            tr.appendChild(cell(d.verified ? I18N.domainVerifiedBadge : I18N.domainPendingBadge));
+            // 미검증 도메인은 게시해야 할 TXT 레코드(name → value)를 그대로 보여준다.
+            const txtTd = document.createElement('td');
+            if (d.verified) {
+                txtTd.textContent = '-';
+            } else {
+                txtTd.style.fontFamily = 'monospace';
+                txtTd.style.fontSize = '12px';
+                txtTd.textContent = d.txtRecordName + ' TXT "' + d.txtRecordValue + '"';
+            }
+            tr.appendChild(txtTd);
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            if (!d.verified) {
+                actions.appendChild(linkBtn(I18N.domainVerify, () => verifyDomain(id, d)));
+            }
+            actions.appendChild(linkBtn(I18N.domainDelete, () => deleteDomain(id, d)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function addDomain() {
+        clearError();
+        clearSuccess();
+        if (!selectedOrg) return;
+        const domain = document.getElementById('domain-name').value.trim();
+        if (!domain) return;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/domains', {domain});
+        if (reauth) return;
+        // 공용 도메인 400·전역 중복 409 는 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.domainAddFailed); return; }
+        document.getElementById('domain-name').value = '';
+        loadDomains(selectedOrg);
+    }
+
+    async function verifyDomain(id, d) {
+        clearError();
+        clearSuccess();
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(id) + '/domains/' + encodeURIComponent(d.id) + '/verify');
+        if (reauth) return;
+        // 레코드 미발견/불일치 400 은 서버 message(전파 안내)를 우선 안내.
+        if (!ok) { showError(data.message || I18N.domainVerifyFailed); return; }
+        showSuccess(I18N.domainVerifiedMsg.replace('{0}', d.domain));
+        loadDomains(id);
+    }
+
+    async function deleteDomain(id, d) {
+        clearError();
+        if (!confirm(I18N.domainDeleteConfirm.replace('{0}', d.domain))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(id) + '/domains/' + encodeURIComponent(d.id));
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.domainDeleteFailed); return; }
+        loadDomains(id);
+    }
+
+    async function toggleAutoJoin(cb) {
+        clearError();
+        clearSuccess();
+        if (!selectedOrg) return;
+        const enabled = cb.checked;
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/auto-join', {enabled});
+        if (reauth) { cb.checked = !enabled; return; }
+        if (!ok) { cb.checked = !enabled; showError(data.message || I18N.autoJoinFailed); return; }
+        showSuccess(I18N.autoJoinSaved);
+    }
+
+    // ---- 초대(Invitations) — /api/orgs/{orgId}/invitations (세션 인가: 플랫폼 ADMIN 또는 그 org ORG_ADMIN) ----
+    async function loadInvitations(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/invitations');
+        if (!ok) { showError(I18N.inviteLoadFailed); return; }
+        const tbody = document.getElementById('invite-list');
+        tbody.innerHTML = '';
+        document.getElementById('invite-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(inv => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(inv.email, true));
+            tr.appendChild(cell(inv.role === 'ORG_ADMIN' ? I18N.roleOrgAdmin : I18N.roleMember));
+            tr.appendChild(cell(inv.department || '-'));
+            tr.appendChild(cell(new Date(inv.expiresAt).toLocaleString()));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.inviteResend, () => resendInvite(id, inv)));
+            actions.appendChild(linkBtn(I18N.inviteRevoke, () => revokeInvite(id, inv)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function sendInvite() {
+        clearError();
+        const email = document.getElementById('invite-email').value.trim();
+        const department = document.getElementById('invite-dept').value.trim() || null;
+        const role = document.querySelector('input[name="invite-role"]:checked').value;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/invitations', {email, role, department});
+        if (reauth) return;
+        if (!ok) { showError(I18N.inviteSendFailed); return; }
+        document.getElementById('invite-email').value = '';
+        document.getElementById('invite-dept').value = '';
+        loadInvitations(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    // ---- CSV 대량 초대 — POST /api/orgs/{orgId}/invitations/bulk (행별 독립 결과 보고) ----
+
+    /** 선택한 CSV 파일을 텍스트로 읽어 textarea 를 채운다(전송은 항상 텍스트 기반 — multipart 불요). */
+    function readBulkFile(input) {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { document.getElementById('bulk-csv').value = String(reader.result || ''); };
+        reader.readAsText(file);
+        input.value = ''; // 같은 파일 재선택도 change 이벤트가 다시 발화되도록 리셋.
+    }
+
+    async function sendBulkInvites() {
+        clearError();
+        clearSuccess();
+        if (!selectedOrg) return;
+        const csv = document.getElementById('bulk-csv').value;
+        if (!csv.trim()) return;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/invitations/bulk', {csv});
+        if (reauth) return;
+        // 행 수/크기 상한·빈 CSV 등 400 은 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.bulkFailed); return; }
+        document.getElementById('bulk-result').classList.remove('hidden');
+        document.getElementById('bulk-summary').textContent = I18N.bulkResult
+            .replace('{0}', String(data.total)).replace('{1}', String(data.created)).replace('{2}', String(data.rejected));
+        const tbody = document.getElementById('bulk-rejected-list');
+        tbody.innerHTML = '';
+        const rejectedRows = (data.results || []).filter(r => r.status === 'REJECTED');
+        document.getElementById('bulk-rejected-wrap').classList.toggle('hidden', rejectedRows.length === 0);
+        rejectedRows.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(String(r.line)));
+            tr.appendChild(cell(r.email, true));
+            tr.appendChild(cell(r.reason || '-'));
+            tbody.appendChild(tr);
+        });
+        // 전부 성공했으면 입력을 비운다(일부 거부 시엔 원문을 남겨 수정·재전송을 돕는다).
+        if (data.rejected === 0) document.getElementById('bulk-csv').value = '';
+        loadInvitations(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    async function revokeInvite(id, inv) {
+        clearError();
+        if (!confirm(I18N.inviteRevokeConfirm.replace('{0}', inv.email))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(id) + '/invitations/' + encodeURIComponent(inv.id));
+        if (reauth) return;
+        if (!ok) { showError(I18N.inviteRevokeFailed); return; }
+        loadInvitations(id);
+        loadDashboard(id);
+    }
+
+    async function resendInvite(id, inv) {
+        clearError();
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(id) + '/invitations/' + encodeURIComponent(inv.id) + '/resend');
+        if (reauth) return;
+        // 쿨다운/비PENDING 등 400 은 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.inviteResendFailed); return; }
+        loadInvitations(id); // 새 만료 시각 반영.
+        loadDashboard(id);
+    }
+
+    // ---- 활동 로그(Audit) — GET /api/orgs/{orgId}/audit (org 격리: org_id 정확 일치만 반환) ----
+    const AUDIT_PAGE = 20;
+    let auditOffset = 0;
+
+    function auditTypeLabel(type) { return (I18N.auditTypes && I18N.auditTypes[type]) || type; }
+
+    function resetAudit(id) {
+        auditOffset = 0;
+        document.getElementById('audit-list').innerHTML = '';
+        return loadAudit(id);
+    }
+
+    async function loadAudit(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/audit?limit=' + AUDIT_PAGE + '&offset=' + auditOffset);
+        if (!ok) { showError(I18N.auditLoadFailed); return; }
+        const tbody = document.getElementById('audit-list');
+        data.forEach(ev => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(new Date(ev.createdAt).toLocaleString()));
+            tr.appendChild(cell(auditTypeLabel(ev.type)));
+            tr.appendChild(cell(ev.platformActor ? I18N.auditPlatformActor : (ev.email || ev.userId || '-'), true));
+            tbody.appendChild(tr);
+        });
+        auditOffset += data.length;
+        document.getElementById('audit-empty').classList.toggle('hidden', tbody.children.length > 0);
+        // 반환 건수가 페이지 크기와 같으면 더 있을 수 있으므로 '더 보기'를 노출한다.
+        document.getElementById('audit-more').classList.toggle('hidden', data.length < AUDIT_PAGE);
+    }
+
+    function loadMoreAudit() { if (selectedOrg) loadAudit(selectedOrg); }
+
+    // ---- 부서(조직도) — GET/POST/PUT/DELETE /api/orgs/{orgId}/departments (flat 응답 → JS 트리 구성) ----
+
+    /**
+     * flat [{id,parentId,...}] 을 트리로 구성. 방어: parentId 가 목록에 없으면(고아) 루트로,
+     * 자기참조(parentId===id)는 루트로. 순환은 렌더 단계 visited 로 재방어한다.
+     */
+    function buildDeptTree(list) {
+        const byId = new Map();
+        list.forEach(d => byId.set(d.id, {id: d.id, parentId: d.parentId, name: d.name, memberCount: d.memberCount, children: []}));
+        const roots = [];
+        byId.forEach(node => {
+            const parent = node.parentId != null ? byId.get(node.parentId) : null;
+            if (parent && parent.id !== node.id) parent.children.push(node);
+            else roots.push(node);
+        });
+        return roots;
+    }
+
+    function deptRow(node, depth) {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        nameTd.style.paddingLeft = (depth * 20 + 8) + 'px';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = (depth > 0 ? '└ ' : '') + node.name;
+        nameTd.appendChild(nameSpan);
+        const badge = document.createElement('span');
+        badge.className = 'hint';
+        badge.style.marginLeft = '8px';
+        badge.textContent = I18N.deptMembers.replace('{0}', String(node.memberCount));
+        nameTd.appendChild(badge);
+        tr.appendChild(nameTd);
+        const actions = document.createElement('td');
+        actions.style.whiteSpace = 'nowrap';
+        actions.appendChild(linkBtn(I18N.deptRename, () => renameDept(node)));
+        actions.appendChild(linkBtn(I18N.deptDelete, () => deleteDept(node)));
+        tr.appendChild(actions);
+        return tr;
+    }
+
+    function renderDepts() {
+        const tbody = document.getElementById('dept-list');
+        tbody.innerHTML = '';
+        document.getElementById('dept-empty').classList.toggle('hidden', departments.length > 0);
+        const roots = buildDeptTree(departments);
+        const visited = new Set();
+        (function walk(nodes, depth) {
+            nodes.forEach(n => {
+                if (visited.has(n.id)) return; // 순환 방어
+                visited.add(n.id);
+                tbody.appendChild(deptRow(n, depth));
+                if (n.children.length) walk(n.children, depth + 1);
+            });
+        })(roots, 0);
+        // 순환 등으로 트리에서 누락된 노드는 평면 폴백으로라도 노출(고아/사이클 무손실).
+        departments.forEach(d => {
+            if (!visited.has(d.id)) { visited.add(d.id); tbody.appendChild(deptRow({name: d.name, memberCount: d.memberCount, id: d.id}, 0)); }
+        });
+        renderDeptParentOptions();
+    }
+
+    function renderDeptParentOptions() {
+        const sel = document.getElementById('dept-parent');
+        sel.innerHTML = '';
+        const root = document.createElement('option');
+        root.value = ''; root.textContent = I18N.deptParentRoot;
+        sel.appendChild(root);
+        departments.forEach(d => {
+            const o = document.createElement('option');
+            o.value = d.id; o.textContent = d.name;
+            sel.appendChild(o);
+        });
+    }
+
+    async function loadDepartments(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/departments');
+        if (!ok) { showError(I18N.deptLoadFailed); return; }
+        departments = data;
+        renderDepts();
+    }
+
+    async function createDept() {
+        clearError();
+        if (!selectedOrg) return;
+        const name = document.getElementById('dept-name').value.trim();
+        const parentId = document.getElementById('dept-parent').value || null;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/departments', {name, parentId});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.deptCreateFailed); return; }
+        document.getElementById('dept-name').value = '';
+        document.getElementById('dept-parent').value = '';
+        await loadDepartments(selectedOrg);
+        loadMembers(selectedOrg); // 배정 select 옵션 갱신
+        loadDashboard(selectedOrg);
+    }
+
+    async function renameDept(node) {
+        clearError();
+        const name = prompt(I18N.deptRenamePrompt, node.name);
+        if (name == null) return;
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/departments/' + encodeURIComponent(node.id), {name: name.trim()});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.deptRenameFailed); return; }
+        await loadDepartments(selectedOrg);
+        loadMembers(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    async function deleteDept(node) {
+        clearError();
+        if (!confirm(I18N.deptDeleteConfirm.replace('{0}', node.name))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/departments/' + encodeURIComponent(node.id));
+        if (reauth) return;
+        // 자식 있으면 400 + 서버 message("하위 부서를 먼저 정리하세요")를 우선 안내.
+        if (!ok) { showError(data.message || I18N.deptDeleteFailed); return; }
+        await loadDepartments(selectedOrg);
+        loadMembers(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    // ---- 사업장(사이트) — GET/POST/PUT/DELETE /api/orgs/{orgId}/sites ----
+
+    function prefillSiteTimezone() {
+        const org = orgs.find(o => o.id === selectedOrg);
+        document.getElementById('site-timezone').value = org && org.timezone ? org.timezone : '';
+    }
+
+    function renderSites() {
+        const tbody = document.getElementById('site-list');
+        tbody.innerHTML = '';
+        document.getElementById('site-empty').classList.toggle('hidden', sites.length > 0);
+        sites.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(s.name));
+            tr.appendChild(cell(s.address || '-'));
+            tr.appendChild(cell(s.timezone, true));
+            tr.appendChild(cell(String(s.memberCount)));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.siteEdit, () => editSite(s)));
+            actions.appendChild(linkBtn(I18N.siteDelete, () => deleteSite(s)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadSites(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/sites');
+        if (!ok) { showError(I18N.siteLoadFailed); return; }
+        sites = data;
+        renderSites();
+    }
+
+    async function createSite() {
+        clearError();
+        if (!selectedOrg) return;
+        const name = document.getElementById('site-name').value.trim();
+        const address = document.getElementById('site-address').value.trim() || null;
+        const timezone = document.getElementById('site-timezone').value.trim() || null;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/sites', {name, address, timezone});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.siteCreateFailed); return; }
+        document.getElementById('site-name').value = '';
+        document.getElementById('site-address').value = '';
+        prefillSiteTimezone();
+        await loadSites(selectedOrg);
+        loadMembers(selectedOrg); // 배정 select 옵션 갱신
+        loadDashboard(selectedOrg);
+    }
+
+    async function editSite(s) {
+        clearError();
+        const name = prompt(I18N.siteEditNamePrompt, s.name);
+        if (name == null) return;
+        const address = prompt(I18N.siteEditAddressPrompt, s.address || '');
+        if (address == null) return;
+        const timezone = prompt(I18N.siteEditTzPrompt, s.timezone);
+        if (timezone == null) return;
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/sites/' + encodeURIComponent(s.id),
+            {name: name.trim(), address: address.trim(), timezone: timezone.trim()});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.siteUpdateFailed); return; }
+        await loadSites(selectedOrg);
+        loadMembers(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    async function deleteSite(s) {
+        clearError();
+        if (!confirm(I18N.siteDeleteConfirm.replace('{0}', s.name))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/sites/' + encodeURIComponent(s.id));
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.siteDeleteFailed); return; }
+        await loadSites(selectedOrg);
+        loadMembers(selectedOrg);
+        loadDashboard(selectedOrg);
+    }
+
+    // ---- 멤버 구조적 배정 — PUT /api/orgs/{orgId}/members/{userId}/assignment (full-replace, 빈 값=해제) ----
+
+    function assignSelect(items, currentId, onchange, ariaLabel) {
+        const sel = document.createElement('select');
+        if (ariaLabel) sel.setAttribute('aria-label', ariaLabel);
+        const none = document.createElement('option');
+        none.value = ''; none.textContent = I18N.assignNone;
+        sel.appendChild(none);
+        items.forEach(it => {
+            const o = document.createElement('option');
+            o.value = it.id; o.textContent = it.name;
+            if (currentId && it.id === currentId) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.onchange = onchange;
+        return sel;
+    }
+
+    async function applyAssignment(id, userId, deptSel, siteSel) {
+        clearError();
+        const departmentId = deptSel.value || null;
+        const siteId = siteSel.value || null;
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(userId) + '/assignment', {departmentId, siteId});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.assignFailed); return; }
+        // 배정 반영 + 부서/사업장 memberCount 배지 갱신.
+        loadMembers(id);
+        loadDepartments(id);
+        loadSites(id);
+        loadDashboard(id);
+    }
+
+    // ---- 임직원 HR 속성(사번·직급·고용형태·입사일·재직상태) + 멤버십 이력(SCD) ----
+    const MEMBER_COLSPAN = 7; // 멤버 테이블 컬럼 수(이메일·역할·HR·부서메모·배정부서·사업장·액션)
+
+    function employmentTypeLabel(t) { return t ? ((I18N.employmentTypes && I18N.employmentTypes[t]) || t) : '-'; }
+    function employmentStatusLabel(s) { return (I18N.employmentStatuses && I18N.employmentStatuses[s]) || s || '-'; }
+
+    /** 멤버 행 HR 요약 — 사번·직급을 한 컬럼에 압축 표기하고 재직상태를 배지로 덧붙인다. */
+    function hrSummaryCell(m) {
+        const td = document.createElement('td');
+        const parts = [];
+        if (m.employeeId) parts.push(m.employeeId);
+        if (m.jobTitle) parts.push(m.jobTitle);
+        td.textContent = parts.join(' · ') || '-';
+        const badge = document.createElement('span');
+        badge.className = 'hint';
+        badge.style.marginLeft = '6px';
+        badge.textContent = employmentStatusLabel(m.employmentStatus);
+        td.appendChild(badge);
+        return td;
+    }
+
+    /**
+     * 멤버 행 바로 아래에 붙는 인라인 패널(tr[data-panel]) 토글. 같은 종류가 이미 열려 있으면 닫고
+     * true(토글 종료), 다른 종류가 열려 있으면 교체를 위해 닫고 false 를 반환한다.
+     */
+    function closeMemberPanel(tr, kind) {
+        const next = tr.nextElementSibling;
+        if (next && next.dataset && next.dataset.panel) {
+            const was = next.dataset.panel;
+            next.remove();
+            return was === kind;
+        }
+        return false;
+    }
+
+    function memberPanelRow(kind, headingText) {
+        const panelTr = document.createElement('tr');
+        panelTr.dataset.panel = kind;
+        const td = document.createElement('td');
+        td.colSpan = MEMBER_COLSPAN;
+        td.style.padding = '12px 8px 16px';
+        const heading = document.createElement('div');
+        heading.className = 'hint';
+        heading.style.marginBottom = '8px';
+        heading.textContent = headingText;
+        td.appendChild(heading);
+        panelTr.appendChild(td);
+        return {panelTr, td};
+    }
+
+    /** label(htmlFor)+input 쌍의 필드 래퍼 — JS 생성 폼에서도 접근성 라벨을 보장한다(기존 배정 select 관례). */
+    function attrField(labelText, input, inputId) {
+        const wrap = document.createElement('div');
+        wrap.className = 'field';
+        wrap.style.cssText = 'margin:0;min-width:150px;flex:1;';
+        const label = document.createElement('label');
+        label.htmlFor = inputId;
+        label.textContent = labelText;
+        input.id = inputId;
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        return wrap;
+    }
+
+    function enumSelect(options, current, includeNone) {
+        const sel = document.createElement('select');
+        if (includeNone) {
+            const none = document.createElement('option');
+            none.value = ''; none.textContent = I18N.attrsTypeNone;
+            sel.appendChild(none);
+        }
+        options.forEach(([value, label]) => {
+            const o = document.createElement('option');
+            o.value = value; o.textContent = label;
+            if (value === current) o.selected = true;
+            sel.appendChild(o);
+        });
+        return sel;
+    }
+
+    /** 열려 있는 속성 편집 패널의 미저장 입력을 캡처(loadMembers 재렌더 복원용). 없으면 null. */
+    function captureAttrsDraft(tbody) {
+        const panel = tbody.querySelector('tr[data-panel="attrs"]');
+        if (!panel || !panel.dataset.userId) return null;
+        const uid = panel.dataset.userId;
+        const val = s => {
+            const el = panel.querySelector('[id="attr-' + s + '-' + uid + '"]');
+            return el ? el.value : null;
+        };
+        return {userId: uid, empId: val('empid'), jobTitle: val('title'),
+                type: val('type'), hireDate: val('hire'), status: val('status')};
+    }
+
+    function restoreAttrsDraft(id, m, tr, draft) {
+        toggleAttrsPanel(id, m, tr);
+        const set = (s, v) => {
+            if (v === null) return;
+            const el = document.getElementById('attr-' + s + '-' + draft.userId);
+            if (el) el.value = v;
+        };
+        set('empid', draft.empId);
+        set('title', draft.jobTitle);
+        set('type', draft.type);
+        set('hire', draft.hireDate);
+        set('status', draft.status);
+    }
+
+    function toggleAttrsPanel(id, m, tr) {
+        clearError();
+        if (closeMemberPanel(tr, 'attrs')) return;
+        const {panelTr, td} = memberPanelRow('attrs', I18N.attrsHeading.replace('{0}', m.email || m.userId));
+        const uid = m.userId;
+        panelTr.dataset.userId = uid;
+
+        const empId = document.createElement('input');
+        empId.type = 'text'; empId.autocomplete = 'off'; empId.value = m.employeeId || '';
+        const jobTitle = document.createElement('input');
+        jobTitle.type = 'text'; jobTitle.autocomplete = 'off'; jobTitle.value = m.jobTitle || '';
+        const typeSel = enumSelect([
+            ['FULL_TIME', I18N.employmentTypes.FULL_TIME],
+            ['PART_TIME', I18N.employmentTypes.PART_TIME],
+            ['CONTRACT', I18N.employmentTypes.CONTRACT],
+            ['INTERN', I18N.employmentTypes.INTERN],
+        ], m.employmentType || '', true);
+        const hireDate = document.createElement('input');
+        hireDate.type = 'date'; hireDate.value = m.hireDate || '';
+        const statusSel = enumSelect([
+            ['EMPLOYED', I18N.employmentStatuses.EMPLOYED],
+            ['ON_LEAVE', I18N.employmentStatuses.ON_LEAVE],
+            ['TERMINATED', I18N.employmentStatuses.TERMINATED],
+        ], m.employmentStatus, false);
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;';
+        row.appendChild(attrField(I18N.attrsEmployeeId, empId, 'attr-empid-' + uid));
+        row.appendChild(attrField(I18N.attrsJobTitle, jobTitle, 'attr-title-' + uid));
+        row.appendChild(attrField(I18N.attrsEmploymentType, typeSel, 'attr-type-' + uid));
+        row.appendChild(attrField(I18N.attrsHireDate, hireDate, 'attr-hire-' + uid));
+        row.appendChild(attrField(I18N.attrsEmploymentStatus, statusSel, 'attr-status-' + uid));
+        td.appendChild(row);
+
+        // 빈 입력 = 해제(clear) 시맨틱 안내(재직상태는 항상 선택값 전송 — 해제 불가).
+        const hint = document.createElement('div');
+        hint.className = 'hint';
+        hint.style.margin = '8px 0 0';
+        hint.textContent = I18N.attrsClearHint;
+        td.appendChild(hint);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions end';
+        actions.style.marginTop = '8px';
+        actions.appendChild(linkBtn(I18N.attrsClose, () => panelTr.remove()));
+        const save = document.createElement('button');
+        save.type = 'button'; save.className = 'btn-secondary';
+        save.textContent = I18N.attrsSave;
+        save.onclick = () => saveAttrs(id, uid, {empId, jobTitle, typeSel, hireDate, statusSel});
+        actions.appendChild(save);
+        td.appendChild(actions);
+
+        tr.after(panelTr);
+    }
+
+    async function saveAttrs(id, userId, f) {
+        clearError();
+        clearSuccess();
+        // 빈 입력은 null 전송 = 값 해제(full-replace). 재직상태는 select 라 항상 값이 있다(null=유지 미사용).
+        const body = {
+            employeeId: f.empId.value.trim() || null,
+            jobTitle: f.jobTitle.value.trim() || null,
+            employmentType: f.typeSel.value || null,
+            hireDate: f.hireDate.value || null,
+            employmentStatus: f.statusSel.value,
+        };
+        const {ok, data, reauth} = await api('PUT', '/api/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(userId) + '/attributes', body);
+        if (reauth) return;
+        // 잘못된 enum/날짜 등 400 은 서버 message 를 우선 안내(I18N 키는 보조).
+        if (!ok) { showError(data.message || I18N.attrsSaveFailed); return; }
+        showSuccess(I18N.attrsSaved);
+        // 저장 성공 시 패널을 먼저 닫아 재렌더 draft 복원 대상에서 제외한다(저장=닫힘 유지).
+        const panel = f.empId.closest('tr[data-panel]');
+        if (panel) panel.remove();
+        loadMembers(id); // 재렌더가 HR 요약 갱신을 겸한다.
+        loadDashboard(id);
+    }
+
+    async function toggleHistoryPanel(id, m, tr) {
+        clearError();
+        const next = tr.nextElementSibling;
+        if (next && next.dataset && next.dataset.panel === 'history') { next.remove(); return; }
+        // 로드 실패 시 기존(attrs) 패널이 소실되지 않도록, 기존 패널 제거는 성공 후에만 수행한다.
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(m.userId) + '/history');
+        if (!ok) { showError(I18N.historyLoadFailed); return; }
+        closeMemberPanel(tr, 'history');
+        const {panelTr, td} = memberPanelRow('history', I18N.historyHeading.replace('{0}', m.email || m.userId));
+
+        if (!data.length) {
+            const empty = document.createElement('div');
+            empty.className = 'hint';
+            empty.textContent = I18N.historyEmpty;
+            td.appendChild(empty);
+        } else {
+            const wrap = document.createElement('div');
+            wrap.className = 'table-wrap';
+            const table = document.createElement('table');
+            table.className = 'admin-table';
+            const thead = document.createElement('thead');
+            const headTr = document.createElement('tr');
+            [I18N.historyColTime, I18N.historyColChange, I18N.historyColRole, I18N.historyColStatus, I18N.historyColTitle].forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                headTr.appendChild(th);
+            });
+            thead.appendChild(headTr);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            data.forEach(h => {
+                const rowTr = document.createElement('tr');
+                rowTr.appendChild(cell(new Date(h.recordedAt).toLocaleString()));
+                rowTr.appendChild(cell((I18N.historyChanges && I18N.historyChanges[h.changeType]) || h.changeType));
+                rowTr.appendChild(cell(h.role === 'ORG_ADMIN' ? I18N.roleOrgAdmin : I18N.roleMember));
+                rowTr.appendChild(cell(employmentStatusLabel(h.employmentStatus)));
+                rowTr.appendChild(cell(h.jobTitle || '-'));
+                tbody.appendChild(rowTr);
+            });
+            table.appendChild(tbody);
+            wrap.appendChild(table);
+            td.appendChild(wrap);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'actions end';
+        actions.style.marginTop = '8px';
+        actions.appendChild(linkBtn(I18N.attrsClose, () => panelTr.remove()));
+        td.appendChild(actions);
+
+        tr.after(panelTr);
+    }
+
+    // ---- 식수 예측 — GET /api/orgs/{orgId}/forecast[/backtest] (읽기전용, 집계 파생값만) ----
+
+    // 로컬 달력 기준 YYYY-MM-DD — toISOString(UTC)을 쓰면 KST 00:00~08:59 에 하루 밀린다.
+    function fmtDateInput(d) {
+        const pad = n => String(n).padStart(2, '0');
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+    function forecastSiteName(siteId) {
+        if (!siteId) return I18N.forecastOrgWide;
+        const s = sites.find(x => x.id === siteId);
+        return s ? s.name : siteId;
+    }
+    function forecastMethodLabel(m) { return (I18N.forecastMethods && I18N.forecastMethods[m]) || m; }
+    function mealWindowLabel(w) { return (I18N.mealWindows && I18N.mealWindows[w]) || w; }
+    function pct(v) { return v == null ? '-' : (v * 100).toFixed(1) + '%'; }
+
+    function resetForecastSection() {
+        const day = 24 * 3600 * 1000;
+        const now = Date.now();
+        // 예측 기본: 내일 ~ +7일. 백테스트 기본: 지난 7일(어제까지).
+        document.getElementById('fc-from').value = fmtDateInput(new Date(now + day));
+        document.getElementById('fc-to').value = fmtDateInput(new Date(now + 7 * day));
+        document.getElementById('bt-from').value = fmtDateInput(new Date(now - 7 * day));
+        document.getElementById('bt-to').value = fmtDateInput(new Date(now - day));
+        document.getElementById('fc-list').innerHTML = '';
+        document.getElementById('fc-empty').classList.add('hidden');
+        document.getElementById('bt-summary').textContent = '';
+        const sel = document.getElementById('fc-site');
+        sel.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = '';
+        all.textContent = I18N.forecastAllSites;
+        sel.appendChild(all);
+        sites.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.name;
+            sel.appendChild(o);
+        });
+        document.getElementById('fc-window').value = '';
+    }
+
+    function forecastParams(fromId, toId) {
+        const params = new URLSearchParams();
+        const from = document.getElementById(fromId).value;
+        const to = document.getElementById(toId).value;
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
+        return params;
+    }
+
+    async function loadForecast() {
+        clearError();
+        if (!selectedOrg) return;
+        const params = forecastParams('fc-from', 'fc-to');
+        const siteId = document.getElementById('fc-site').value;
+        if (siteId) params.set('siteId', siteId);
+        const w = document.getElementById('fc-window').value;
+        if (w) params.set('mealWindow', w);
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/forecast?' + params.toString());
+        // 잘못된 기간 등 400 은 서버 message 를 우선 안내.
+        if (!ok) { showError(data.message || I18N.forecastLoadFailed); return; }
+        const tbody = document.getElementById('fc-list');
+        tbody.innerHTML = '';
+        document.getElementById('fc-empty').classList.toggle('hidden', data.cells.length > 0);
+        data.cells.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(c.date, true));
+            tr.appendChild(cell(forecastSiteName(c.siteId)));
+            tr.appendChild(cell(mealWindowLabel(c.mealWindow)));
+            // NO_DATA 는 "0명 예측"이 아니라 "데이터 없음"(predicted=null)이다.
+            tr.appendChild(cell(c.predicted == null ? I18N.forecastNoData : Number(c.predicted).toLocaleString()));
+            tr.appendChild(cell(forecastMethodLabel(c.method)));
+            tr.appendChild(cell(c.basis && c.basis.lastWeekActual != null ? Number(c.basis.lastWeekActual).toLocaleString() : '-'));
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function runBacktest() {
+        clearError();
+        if (!selectedOrg) return;
+        const params = forecastParams('bt-from', 'bt-to');
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/forecast/backtest?' + params.toString());
+        if (!ok) { showError(data.message || I18N.backtestFailed); return; }
+        const s = data.summary;
+        document.getElementById('bt-summary').textContent = I18N.backtestSummary
+            .replace('{0}', String(s.scoredCells))
+            .replace('{1}', pct(s.mape))
+            .replace('{2}', pct(s.wape))
+            .replace('{3}', pct(s.bias));
+    }
+
+    // ---- 청구서 — /api/orgs/{orgId}/invoices (generate·finalize 는 step-up + CSRF) ----
+
+    function invoiceStatusLabel(s) { return (I18N.invoiceStatuses && I18N.invoiceStatuses[s]) || s; }
+
+    function resetInvoiceSection() {
+        const now = new Date();
+        document.getElementById('inv-period').value =
+            now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        closeInvoiceDetail();
+        document.getElementById('inv-list').innerHTML = '';
+        document.getElementById('inv-empty').classList.add('hidden');
+    }
+
+    async function loadInvoices(id) {
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/invoices');
+        if (!ok) { showError(data.message || I18N.invoiceLoadFailed); return; }
+        const tbody = document.getElementById('inv-list');
+        tbody.innerHTML = '';
+        document.getElementById('inv-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(inv => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(inv.period, true));
+            tr.appendChild(cell(invoiceStatusLabel(inv.status)));
+            tr.appendChild(cell(Number(inv.subtotalMinor).toLocaleString()));
+            tr.appendChild(cell(String(inv.txnCount)));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.invoiceDetail, () => openInvoiceDetail(id, inv.id)));
+            if (inv.status === 'DRAFT') {
+                actions.appendChild(linkBtn(I18N.invoiceFinalize, () => finalizeInvoice(id, inv)));
+            }
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function generateInvoice() {
+        clearError();
+        clearSuccess();
+        if (!selectedOrg) return;
+        const period = document.getElementById('inv-period').value.trim();
+        if (!period) return;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(selectedOrg) + '/invoices/generate', {period});
+        if (reauth) return;
+        // FINALIZED 재생성 409·기간 형식 400 은 서버 message 를 우선 안내.
+        if (!ok) { showError(data.message || I18N.invoiceGenerateFailed); return; }
+        showSuccess(I18N.invoiceGenerated.replace('{0}', data.period));
+        await loadInvoices(selectedOrg);
+        renderInvoiceDetail(data);
+    }
+
+    async function openInvoiceDetail(id, invoiceId) {
+        clearError();
+        const {ok, data} = await api('GET', '/api/orgs/' + encodeURIComponent(id) + '/invoices/' + encodeURIComponent(invoiceId));
+        if (!ok) { showError(data.message || I18N.invoiceDetailFailed); return; }
+        renderInvoiceDetail(data);
+    }
+
+    function renderInvoiceDetail(inv) {
+        document.getElementById('inv-detail').classList.remove('hidden');
+        document.getElementById('inv-detail-title').textContent =
+            I18N.invoiceDetailTitle.replace('{0}', inv.period).replace('{1}', invoiceStatusLabel(inv.status));
+        const dept = document.getElementById('inv-dept-list');
+        dept.innerHTML = '';
+        inv.departmentSubtotals.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(d.departmentName || I18N.dashUnassigned));
+            tr.appendChild(cell(String(d.txnCount)));
+            tr.appendChild(cell(Number(d.amountMinor).toLocaleString()));
+            dept.appendChild(tr);
+        });
+        const lines = document.getElementById('inv-line-list');
+        lines.innerHTML = '';
+        inv.lines.forEach(l => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(l.userEmail, true));
+            tr.appendChild(cell(String(l.txnCount)));
+            tr.appendChild(cell(Number(l.amountMinor).toLocaleString()));
+            lines.appendChild(tr);
+        });
+    }
+
+    function closeInvoiceDetail() {
+        document.getElementById('inv-detail').classList.add('hidden');
+        document.getElementById('inv-detail-title').textContent = '';
+        document.getElementById('inv-dept-list').innerHTML = '';
+        document.getElementById('inv-line-list').innerHTML = '';
+    }
+
+    async function finalizeInvoice(id, inv) {
+        clearError();
+        clearSuccess();
+        // 확정 후 불변 경고를 confirm 문구에 포함한다.
+        if (!confirm(I18N.invoiceFinalizeConfirm.replace('{0}', inv.period))) return;
+        const {ok, data, reauth} = await api('POST', '/api/orgs/' + encodeURIComponent(id) + '/invoices/' + encodeURIComponent(inv.id) + '/finalize');
+        if (reauth) return;
+        // 이미 확정·STALE 409 는 서버 message 를 우선 안내.
+        if (!ok) { showError(data.message || I18N.invoiceFinalizeFailed); return; }
+        showSuccess(I18N.invoiceFinalized.replace('{0}', data.period));
+        closeInvoiceDetail();
+        loadInvoices(id);
+    }
+
+    loadOrgs();
+</script>
+</body>
+</html>

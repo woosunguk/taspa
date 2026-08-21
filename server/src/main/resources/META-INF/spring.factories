@@ -1,0 +1,6 @@
+# ★EnvironmentPostProcessor 는 Boot 3.4 에서도 **spring.factories 로만** 발견된다
+# (EnvironmentPostProcessorsFactory.fromSpringFactories → SpringFactoriesLoader).
+# 자동설정에 쓰이는 META-INF/spring/*.imports 로 등록하면 **조용히 무시**되어,
+# 검증기가 있는데도 예전 그대로 자동설정 스택트레이스가 나온다(실제로 한 번 그렇게 만들었다).
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  com.taspa.server.config.RequiredProdEnvValidator

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<baseline version="1.0">
+    <file name="src/main/kotlin/com/taspa/server/admin/AdminCalendarController.kt">
+        <error line="118" column="5" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/billing/InvoiceService.kt">
+        <error line="121" column="5" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/billing/ReconciliationService.kt">
+        <error line="133" column="5" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/domain/iam/IamEnums.kt">
+        <error line="1" column="1" source="standard:filename" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/iam/IamActions.kt">
+        <error line="231" column="5" source="standard:no-consecutive-comments" />
+        <error line="232" column="5" source="standard:no-consecutive-comments" />
+        <error line="312" column="5" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/iam/IamAuthorizationService.kt">
+        <error line="20" column="1" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/main/kotlin/com/taspa/server/org/OrganizationService.kt">
+        <error line="457" column="5" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/test/kotlin/com/taspa/server/admin/AdminUnfinalizedInvoicesIntegrationTest.kt">
+        <error line="47" column="1" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/test/kotlin/com/taspa/server/consumption/ConsumptionEventApiIntegrationTest.kt">
+        <error line="229" column="141" source="standard:max-line-length" />
+        <error line="416" column="141" source="standard:max-line-length" />
+    </file>
+    <file name="src/test/kotlin/com/taspa/server/meal/MerchantConsoleIntegrationTest.kt">
+        <error line="64" column="1" source="standard:no-consecutive-comments" />
+    </file>
+    <file name="src/test/kotlin/com/taspa/server/scim/ScimApiIntegrationTest.kt">
+        <error line="248" column="141" source="standard:max-line-length" />
+    </file>
+</baseline>

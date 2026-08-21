@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{login.linkConfirm.title}">Confirm your account · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{login.linkConfirm.heading}">Confirm your account</h1>
+    <p class="auth-subtitle" th:text="#{login.linkConfirm.prompt(${email}, ${providerLabel})}">
+        An account already exists for this email.
+    </p>
+
+    <div th:if="${info}" class="alert alert-info" th:text="${info}"></div>
+    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+
+    <form method="post" action="/login/link-confirm">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div class="field">
+            <label for="code" th:text="#{common.verificationCode}">Verification code</label>
+            <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn-primary" th:text="#{login.linkConfirm.submit}">Verify and link</button>
+        </div>
+    </form>
+
+    <hr class="divider">
+
+    <form method="post" action="/login/link-confirm/resend">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <button type="submit" class="link" style="background:none;border:none;padding:0;cursor:pointer;"
+                th:text="#{common.resendCode}">
+            Didn't get the code? Resend
+        </button>
+    </form>
+</main>
+</body>
+</html>

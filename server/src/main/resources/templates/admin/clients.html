@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.clients.title}">Client management · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" class="active" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+    <div id="secret-panel" class="alert alert-info hidden">
+        <div th:text="#{admin.clients.secretNotice}">Issued client_secret — copy it now. You won't see it again.</div>
+        <div class="secret" id="secret-value" style="margin-top:8px;"></div>
+    </div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.clients.listHeading}">Clients</h2>
+    <div id="client-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.clients.empty}">No registered clients</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th>client_id</th>
+                <th th:text="#{admin.clients.col.name}">Name</th>
+                <th th:text="#{admin.clients.col.type}">Type</th>
+                <th>scope</th>
+                <th th:text="#{admin.clients.col.redirect}">redirect URI</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="client-list"></tbody>
+        </table>
+    </div>
+
+    <hr class="divider">
+
+    <h2 class="auth-title" style="font-size:18px;" id="form-title" th:text="#{admin.clients.formNew}">Register a new client</h2>
+
+    <div class="field" style="margin-top:16px;">
+        <label for="client-id">client_id</label>
+        <input type="text" id="client-id" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="client-name" th:text="#{admin.clients.nameLabel}">Name (shown on the consent screen)</label>
+        <input type="text" id="client-name" autocomplete="off">
+    </div>
+    <div class="field">
+        <label for="redirect-uris" th:text="#{admin.clients.redirectLabel}">redirect URI (one per line)</label>
+        <textarea id="redirect-uris" rows="3"
+                  style="width:100%;padding:13px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+    </div>
+    <div class="field">
+        <label for="post-logout-uris" th:text="#{admin.clients.postLogoutLabel}">post-logout redirect URI (one per line, optional)</label>
+        <textarea id="post-logout-uris" rows="2"
+                  style="width:100%;padding:13px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+    </div>
+
+    <p class="hint" style="margin:0 0 4px;">scope</p>
+    <div class="check-row">
+        <label><input type="checkbox" class="scope" value="openid" checked> openid</label>
+        <label><input type="checkbox" class="scope" value="profile" checked> profile</label>
+        <label><input type="checkbox" class="scope" value="email" checked> email</label>
+    </div>
+
+    <p class="hint" style="margin:0 0 4px;" th:text="#{admin.clients.grantLabel}">grant type (cannot be changed after registration)</p>
+    <div class="check-row">
+        <label><input type="checkbox" class="grant" value="authorization_code" checked> authorization_code</label>
+        <label><input type="checkbox" class="grant" value="refresh_token" checked> refresh_token</label>
+        <label><input type="checkbox" class="grant" value="client_credentials"> client_credentials</label>
+        <label><input type="checkbox" class="grant" value="urn:ietf:params:oauth:grant-type:device_code"> device_code</label>
+    </div>
+
+    <p class="hint" style="margin:0 0 4px;" th:text="#{admin.clients.typeLabel}">Client type (cannot be changed after registration)</p>
+    <div class="check-row">
+        <label><input type="radio" name="client-type" value="confidential" checked> <span th:text="#{admin.clients.typeConfidential}">Confidential — server app, secret issued</span></label>
+        <label><input type="radio" name="client-type" value="public"> <span th:text="#{admin.clients.typePublic}">Public — SPA/mobile, no secret + PKCE</span></label>
+    </div>
+
+    <div class="actions end" style="gap:12px;">
+        <button type="button" class="btn-secondary hidden" id="cancel-btn" onclick="resetForm()" th:text="#{common.cancel}">Cancel</button>
+        <button type="button" class="btn-primary" id="submit-btn" onclick="submitForm()" th:text="#{admin.clients.submitNew}">Register</button>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        public: [[#{admin.clients.js.public}]],
+        confidential: [[#{admin.clients.js.confidential}]],
+        edit: [[#{admin.clients.js.edit}]],
+        regenSecret: [[#{admin.clients.js.regenSecret}]],
+        delete: [[#{admin.clients.js.delete}]],
+        updateFailed: [[#{admin.clients.js.updateFailed}]],
+        formEdit: [[#{admin.clients.js.formEdit}]],
+        save: [[#{admin.clients.js.save}]],
+        formNew: [[#{admin.clients.formNew}]],
+        submitNew: [[#{admin.clients.submitNew}]],
+        duplicateId: [[#{admin.clients.js.duplicateId}]],
+        createFailed: [[#{admin.clients.js.createFailed}]],
+        regenConfirm: [[#{admin.clients.js.regenConfirm}]],
+        regenFailed: [[#{admin.clients.js.regenFailed}]],
+        deleteConfirm: [[#{admin.clients.js.deleteConfirm}]],
+        deleteFailed: [[#{admin.clients.js.deleteFailed}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    // /api/admin/** 는 CSRF 면제 대상이 아니다 — 모든 변경 요청에 X-CSRF-TOKEN 헤더를 싣는다.
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/clients');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(message) {
+        const el = document.getElementById('error');
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+
+    function clearError() {
+        document.getElementById('error').classList.add('hidden');
+        document.getElementById('secret-panel').classList.add('hidden');
+    }
+
+    function showSecret(secret) {
+        document.getElementById('secret-value').textContent = secret;
+        document.getElementById('secret-panel').classList.remove('hidden');
+        window.scrollTo({top: 0});
+    }
+
+    let editingId = null;
+    let clients = [];
+
+    function lines(id) {
+        return document.getElementById(id).value.split('\n').map(s => s.trim()).filter(s => s);
+    }
+
+    function checkedValues(cls) {
+        return Array.from(document.querySelectorAll('input.' + cls + ':checked')).map(el => el.value);
+    }
+
+    function renderClients() {
+        const tbody = document.getElementById('client-list');
+        tbody.innerHTML = '';
+        document.getElementById('client-empty').classList.toggle('hidden', clients.length > 0);
+        clients.forEach(c => {
+            const tr = document.createElement('tr');
+
+            const idTd = document.createElement('td');
+            idTd.style.fontFamily = 'monospace';
+            idTd.textContent = c.clientId;
+            const nameTd = document.createElement('td');
+            nameTd.textContent = c.clientName;
+            const typeTd = document.createElement('td');
+            typeTd.textContent = c.publicClient ? I18N.public : I18N.confidential;
+            const scopeTd = document.createElement('td');
+            scopeTd.textContent = c.scopes.join(', ');
+            const uriTd = document.createElement('td');
+            uriTd.style.fontFamily = 'monospace';
+            uriTd.style.fontSize = '12px';
+            uriTd.textContent = c.redirectUris.join('\n');
+            uriTd.style.whiteSpace = 'pre-line';
+
+            const actionsTd = document.createElement('td');
+            actionsTd.style.whiteSpace = 'nowrap';
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'link';
+            editBtn.style.cssText = 'background:none;border:none;margin-right:8px;';
+            editBtn.textContent = I18N.edit;
+            editBtn.onclick = () => startEdit(c);
+            actionsTd.appendChild(editBtn);
+            if (!c.publicClient) {
+                const secretBtn = document.createElement('button');
+                secretBtn.type = 'button';
+                secretBtn.className = 'link';
+                secretBtn.style.cssText = 'background:none;border:none;margin-right:8px;';
+                secretBtn.textContent = I18N.regenSecret;
+                secretBtn.onclick = () => regenerateSecret(c);
+                actionsTd.appendChild(secretBtn);
+            }
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'link';
+            deleteBtn.style.cssText = 'background:none;border:none;';
+            deleteBtn.textContent = I18N.delete;
+            deleteBtn.onclick = () => deleteClient(c);
+            actionsTd.appendChild(deleteBtn);
+
+            tr.appendChild(idTd);
+            tr.appendChild(nameTd);
+            tr.appendChild(typeTd);
+            tr.appendChild(scopeTd);
+            tr.appendChild(uriTd);
+            tr.appendChild(actionsTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadClients() {
+        const {ok, data} = await api('GET', '/api/admin/clients');
+        if (!ok) return;
+        clients = data;
+        renderClients();
+    }
+
+    function setImmutableInputsDisabled(disabled) {
+        document.getElementById('client-id').disabled = disabled;
+        document.querySelectorAll('input.grant').forEach(el => el.disabled = disabled);
+        document.querySelectorAll('input[name="client-type"]').forEach(el => el.disabled = disabled);
+    }
+
+    function startEdit(c) {
+        clearError();
+        editingId = c.id;
+        document.getElementById('form-title').textContent = I18N.formEdit.replace('{0}', c.clientId);
+        document.getElementById('submit-btn').textContent = I18N.save;
+        document.getElementById('cancel-btn').classList.remove('hidden');
+        document.getElementById('client-id').value = c.clientId;
+        document.getElementById('client-name').value = c.clientName;
+        document.getElementById('redirect-uris').value = c.redirectUris.join('\n');
+        document.getElementById('post-logout-uris').value = c.postLogoutRedirectUris.join('\n');
+        document.querySelectorAll('input.scope').forEach(el => el.checked = c.scopes.includes(el.value));
+        document.querySelectorAll('input.grant').forEach(el => el.checked = c.grantTypes.includes(el.value));
+        document.querySelector('input[name="client-type"][value="' + (c.publicClient ? 'public' : 'confidential') + '"]').checked = true;
+        setImmutableInputsDisabled(true);
+        document.getElementById('client-name').focus();
+    }
+
+    function resetForm() {
+        editingId = null;
+        document.getElementById('form-title').textContent = I18N.formNew;
+        document.getElementById('submit-btn').textContent = I18N.submitNew;
+        document.getElementById('cancel-btn').classList.add('hidden');
+        document.getElementById('client-id').value = '';
+        document.getElementById('client-name').value = '';
+        document.getElementById('redirect-uris').value = '';
+        document.getElementById('post-logout-uris').value = '';
+        document.querySelectorAll('input.scope').forEach(el => el.checked = true);
+        document.querySelectorAll('input.grant').forEach(el => el.checked = el.value === 'authorization_code' || el.value === 'refresh_token');
+        document.querySelector('input[name="client-type"][value="confidential"]').checked = true;
+        setImmutableInputsDisabled(false);
+    }
+
+    async function submitForm() {
+        clearError();
+        if (editingId) {
+            const {ok, data} = await api('PUT', '/api/admin/clients/' + encodeURIComponent(editingId), {
+                clientName: document.getElementById('client-name').value.trim(),
+                redirectUris: lines('redirect-uris'),
+                postLogoutRedirectUris: lines('post-logout-uris'),
+                scopes: checkedValues('scope'),
+            });
+            if (!ok) { showError(data.message || I18N.updateFailed); return; }
+            resetForm();
+            loadClients();
+            return;
+        }
+        const {ok, status, data} = await api('POST', '/api/admin/clients', {
+            clientId: document.getElementById('client-id').value.trim(),
+            clientName: document.getElementById('client-name').value.trim(),
+            redirectUris: lines('redirect-uris'),
+            postLogoutRedirectUris: lines('post-logout-uris'),
+            scopes: checkedValues('scope'),
+            grantTypes: checkedValues('grant'),
+            publicClient: document.querySelector('input[name="client-type"]:checked').value === 'public',
+        });
+        if (!ok) {
+            showError(status === 409 ? I18N.duplicateId : (data.message || I18N.createFailed));
+            return;
+        }
+        if (data.clientSecret) {
+            showSecret(data.clientSecret);
+        }
+        resetForm();
+        loadClients();
+    }
+
+    async function regenerateSecret(c) {
+        clearError();
+        if (!confirm(I18N.regenConfirm.replace('{0}', c.clientId))) return;
+        const {ok, data} = await api('POST', '/api/admin/clients/' + encodeURIComponent(c.id) + '/secret');
+        if (!ok) { showError(data.message || I18N.regenFailed); return; }
+        showSecret(data.clientSecret);
+    }
+
+    async function deleteClient(c) {
+        clearError();
+        if (!confirm(I18N.deleteConfirm.replace('{0}', c.clientId))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/clients/' + encodeURIComponent(c.id));
+        if (!ok) { showError(data.message || I18N.deleteFailed); return; }
+        if (editingId === c.id) resetForm();
+        loadClients();
+    }
+
+    loadClients();
+</script>
+</body>
+</html>

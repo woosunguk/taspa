@@ -1,0 +1,426 @@
+/* taspa 공통 인증 화면 스타일 — 구글 로그인과 같은 "느낌"(중앙 카드/단일 컬럼/시스템 폰트).
+   구글 로고·워드마크·트레이드드레스는 복제하지 않고 "taspa" 텍스트 워드마크를 사용한다. */
+
+:root {
+    --taspa-blue: #1a73e8;
+    --taspa-blue-hover: #1b66c9;
+    --taspa-text: #202124;
+    --taspa-muted: #5f6368;
+    --taspa-border: #dadce0;
+    --taspa-error: #d93025;
+    --taspa-bg: #ffffff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background: var(--taspa-bg);
+    color: var(--taspa-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 450px;
+    margin: 48px 16px;
+    padding: 48px 40px 36px;
+    border: 1px solid var(--taspa-border);
+    border-radius: 8px;
+}
+
+@media (max-width: 480px) {
+    .auth-card {
+        border: none;
+        padding: 24px 20px;
+    }
+}
+
+.wordmark {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+    color: var(--taspa-text);
+    margin-bottom: 12px;
+}
+
+.wordmark b {
+    color: var(--taspa-blue);
+    font-weight: 700;
+}
+
+.auth-title {
+    font-size: 24px;
+    font-weight: 400;
+    margin: 8px 0 4px;
+}
+
+.auth-subtitle {
+    font-size: 16px;
+    color: var(--taspa-text);
+    margin: 0 0 28px;
+}
+
+.email-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 28px;
+    padding: 5px 14px 5px 10px;
+    border: 1px solid var(--taspa-border);
+    border-radius: 999px;
+    font-size: 14px;
+    color: var(--taspa-text);
+}
+
+.email-chip .dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--taspa-blue);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.field {
+    position: relative;
+    margin-bottom: 24px;
+}
+
+.field input {
+    width: 100%;
+    padding: 13px 15px;
+    font-size: 16px;
+    border: 1px solid var(--taspa-border);
+    border-radius: 4px;
+    outline: none;
+    color: var(--taspa-text);
+    background: transparent;
+}
+
+.field input:focus {
+    border: 2px solid var(--taspa-blue);
+    padding: 12px 14px;
+}
+
+.field label {
+    display: block;
+    font-size: 13px;
+    color: var(--taspa-muted);
+    margin-bottom: 6px;
+}
+
+.hint {
+    font-size: 14px;
+    color: var(--taspa-muted);
+    margin: -12px 0 24px;
+}
+
+.alert {
+    font-size: 14px;
+    margin-bottom: 20px;
+    padding: 10px 14px;
+    border-radius: 4px;
+}
+
+.alert-error {
+    color: var(--taspa-error);
+    background: #fce8e6;
+}
+
+.alert-info {
+    color: #174ea6;
+    background: #e8f0fe;
+}
+
+.field-error {
+    color: var(--taspa-error);
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 32px;
+}
+
+.actions.end {
+    justify-content: flex-end;
+}
+
+.btn-primary {
+    background: var(--taspa-blue);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background: var(--taspa-blue-hover);
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--taspa-blue);
+    border: 1px solid var(--taspa-border);
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.link {
+    color: var(--taspa-blue);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+.link-muted {
+    color: var(--taspa-muted);
+}
+
+.stack-links {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 28px;
+}
+
+.divider {
+    border: none;
+    border-top: 1px solid var(--taspa-border);
+    margin: 28px 0;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--taspa-border);
+    font-size: 14px;
+}
+
+.info-row .label {
+    color: var(--taspa-muted);
+}
+
+.badge {
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 999px;
+}
+
+.badge-on {
+    background: #e6f4ea;
+    color: #137333;
+}
+
+.badge-off {
+    background: #fef7e0;
+    color: #b06000;
+}
+
+.qr {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.qr img {
+    width: 200px;
+    height: 200px;
+}
+
+.secret {
+    font-family: monospace;
+    font-size: 14px;
+    background: #f1f3f4;
+    padding: 8px 12px;
+    border-radius: 4px;
+    text-align: center;
+    word-break: break-all;
+}
+
+.backup-codes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-family: monospace;
+    font-size: 15px;
+    margin: 16px 0;
+}
+
+.backup-codes span {
+    background: #f1f3f4;
+    padding: 8px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.scope-list {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 8px;
+}
+
+.scope-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    font-size: 15px;
+    border-bottom: 1px solid var(--taspa-border);
+}
+
+.scope-list li::before {
+    content: "•";
+    color: var(--taspa-blue);
+    font-size: 20px;
+}
+
+.hidden {
+    display: none;
+}
+
+/* ---- 관리 콘솔 (auth-card 를 넓힌 레이아웃 + 목록 테이블) ---- */
+
+.admin-card {
+    max-width: 960px;
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.admin-header .admin-account {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.admin-header .btn-secondary {
+    width: auto;
+    padding: 6px 16px;
+    font-size: 13px;
+}
+
+.admin-nav {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0 24px;
+    border-bottom: 1px solid var(--taspa-border);
+    padding-bottom: 12px;
+}
+
+.admin-nav a {
+    color: var(--taspa-muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.admin-nav a:hover,
+.admin-nav a.active {
+    color: var(--taspa-blue);
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin: 8px 0 24px;
+}
+
+.stat-box {
+    border: 1px solid var(--taspa-border);
+    border-radius: 8px;
+    padding: 16px 20px;
+}
+
+.stat-box .num {
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--taspa-blue);
+}
+
+.stat-box .label {
+    font-size: 13px;
+    color: var(--taspa-muted);
+    margin-top: 4px;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.admin-table th {
+    text-align: left;
+    color: var(--taspa-muted);
+    font-weight: 500;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--taspa-border);
+    white-space: nowrap;
+}
+
+.admin-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--taspa-border);
+    vertical-align: top;
+    word-break: break-all;
+}
+
+.detail-cell {
+    max-width: 360px;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--taspa-muted);
+}
+
+.check-row {
+    display: flex;
+    gap: 20px;
+    margin: 8px 0 20px;
+    font-size: 14px;
+    flex-wrap: wrap;
+}
+
+.check-row label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--taspa-text);
+}

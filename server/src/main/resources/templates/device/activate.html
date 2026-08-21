@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{device.activate.title}">Connect a device · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{device.activate.heading}">Connect a device</h1>
+    <p class="auth-subtitle" th:text="#{device.activate.subtitle}">
+        Enter the code shown on your device
+    </p>
+
+    <!--
+      POST 대상 /oauth2/device_verification 은 SAS 인가 서버 필터 체인(endpointsMatcher) 안이라
+      CSRF 가 자동 비활성이다 — 별도 CSRF 토큰이 필요 없다(공식 device-flow 샘플과 동일).
+    -->
+    <form method="post" action="/oauth2/device_verification">
+        <div class="field">
+            <label for="user_code" th:text="#{device.activate.label}">Device code</label>
+            <input type="text" id="user_code" name="user_code"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false"
+                   autofocus required th:placeholder="#{device.activate.placeholder}" placeholder="e.g. WDJB-MJHT">
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn-primary" th:text="#{common.continue}">Continue</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

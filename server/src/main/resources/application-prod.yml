@@ -1,0 +1,158 @@
+# 프로덕션 프로파일 — --spring.profiles.active=prod 일 때만 로드된다.
+#
+# 원칙
+#  1) 모든 시크릿/외부 엔드포인트는 기본값 없는 ${ENV} 로 강제한다 → 미주입 시 기동 실패(fail-fast).
+#  2) dev 편의(localhost 기본값)는 application.yml(+dev 블록)에 그대로 남아 영향받지 않는다.
+#  3) https/비-localhost 등 의미 검증은 ProductionSafetyValidator 가 기동 시 추가로 수행한다.
+#
+# 필수 환경변수(미설정 시 기동 실패):
+#   DB_URL, DB_USERNAME, DB_PASSWORD
+#   MAIL_HOST
+#   TASPA_TRUSTED_PROXIES       (신뢰 프록시 IP 대역 정규식 — 예: 10\.0\.0\.\d+|172\.1[6-9]\..* — 이 대역의 XFF 만 신뢰)
+#   TASPA_ISSUER_URI            (예: https://id.example.com — 발급 토큰 iss/디스커버리에 노출)
+#   TASPA_WEBAUTHN_RP_ID        (예: id.example.com)
+#   TASPA_WEBAUTHN_ALLOWED_ORIGINS (예: https://id.example.com, 쉼표 구분)
+#   MFA_ENCRYPTION_KEY          (TOTP 시크릿 암호화 키)
+#   TASPA_JWK_ENCRYPTION_KEY    (JWT 서명 개인키 암호화 키 — MFA 키와 분리)
+# 선택(기본값 존재):
+#   TASPA_PUBLIC_BASE_URL(기본=TASPA_ISSUER_URI), DB_POOL_SIZE,
+#   MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_SMTP_* 타임아웃,
+#   TASPA_BREACH_CHECK_ENABLED  (유출 비밀번호 검사 on/off — prod 기본 true)
+#   TASPA_LOG_SERVICE_ENVIRONMENT (구조화 로그의 service.environment 라벨 — 미설정 시 필드 생략)
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      # Postgres max_connections ÷ 인스턴스 수 이하로 유지할 것 — 세션 저장소(spring-session-jdbc)가
+      # 일부 경로에서 요청당 커넥션 2개를 점유할 수 있다(PasswordResetService KDoc 참고).
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+          # SMTP 지연/행 방지 — 요청 스레드가 무한 대기하지 않도록 타임아웃을 강제한다.
+          # (JavaMail 기본은 무한 → 메일 서버 장애 시 Tomcat 워커 고갈로 IdP 전체 마비)
+          connectiontimeout: ${MAIL_SMTP_CONNECT_TIMEOUT_MS:5000}
+          timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:5000}
+          writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:5000}
+  lifecycle:
+    # graceful shutdown: 인플라이트 요청 완료 대기(오케스트레이터 terminationGracePeriod 와 정렬).
+    timeout-per-shutdown-phase: 30s
+
+server:
+  # TLS 종단 리버스 프록시 뒤: 신뢰 프록시가 붙인 X-Forwarded-* 만으로 request.isSecure()/remoteAddr 를
+  # 정상화한다 → SESSION·taspa_td 쿠키 Secure 플래그, HSTS 방출, 리스크 판정/감사/rate-limit IP 가 올바르게 동작.
+  #
+  # 반드시 native 를 쓴다(framework 금지): native 는 Tomcat RemoteIpValve 를 통해 아래 internal-proxies 로
+  # 지정한 신뢰 프록시가 붙인 XFF 만으로 remoteAddr 를 재작성한다. framework 전략의 ForwardedHeaderFilter 는
+  # 신뢰 프록시 allowlist 가 없어 클라이언트가 실은 X-Forwarded-For 를 그대로 remoteAddr 로 반영 →
+  # RequestClientInfo.ip() 가 위조되어 리스크 신호(unseenDevice/rapidIpChange)·감사 로그 IP·rate-limit 키가
+  # 전부 스푸핑 가능해진다(docs/architecture.md §8.10, RequestClientInfo KDoc).
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # 신뢰 프록시(로드밸런서/인그레스) IP 대역 정규식 — 이 대역에서 온 요청의 XFF 만 remoteAddr 재작성에
+      # 반영되고, 그 밖의 출발지가 실은 XFF 는 무시된다. 실제 프록시 대역으로 반드시 지정(미주입 시 기동 실패).
+      internal-proxies: ${TASPA_TRUSTED_PROXIES}
+  shutdown: graceful
+
+taspa:
+  # OIDC issuer 는 발급 토큰의 iss·디스커버리 문서·JWKS URL 에 그대로 노출된다 → 공개 https URL 필수.
+  issuer-uri: ${TASPA_ISSUER_URI}
+  password-reset:
+    base-url: ${TASPA_PUBLIC_BASE_URL:${TASPA_ISSUER_URI}}
+  magic-link:
+    base-url: ${TASPA_PUBLIC_BASE_URL:${TASPA_ISSUER_URI}}
+  org-invitation:
+    # ★이 오버라이드가 없던 동안 prod 에서 **조직 초대 메일과 청구서 초안 알림의 링크가
+    # http://localhost:9100 을 가리켰다**(application.yml 의 dev 기본값). 받는 사람 브라우저에서는
+    # 그냥 열리지 않는 링크라, 온보딩이 통째로 막히면서도 서버 로그에는 아무 흔적이 없다.
+    # 세 링크 base(비밀번호 재설정·매직링크·초대)는 **같은 키를 공유**해야 한다 — 하나만 고치면
+    # 그 메일만 조용히 다른 호스트를 가리킨다. ProductionSafetyValidator 가 셋 다 검사한다.
+    base-url: ${TASPA_PUBLIC_BASE_URL:${TASPA_ISSUER_URI}}
+  webauthn:
+    # rpId/allowedOrigins 가 실제 접속 오리진과 불일치하면 패스키가 브라우저 단에서 조용히 실패한다.
+    rp-id: ${TASPA_WEBAUTHN_RP_ID}
+    rp-name: ${TASPA_WEBAUTHN_RP_NAME:taspa}
+    allowed-origins: ${TASPA_WEBAUTHN_ALLOWED_ORIGINS}
+  mfa:
+    # dev 기본값 폴백 제거 — 미설정 시 기동 실패(EncryptionConfig 가 dev 상수도 별도 차단).
+    encryption-key: ${MFA_ENCRYPTION_KEY}
+  jwk:
+    # 서명키 암호화 키를 MFA 키와 분리해 prod 필수로 요구(단일 키 유출면 축소).
+    encryption-key: ${TASPA_JWK_ENCRYPTION_KEY}
+  security:
+    headers:
+      # prod 전용: CSP·HSTS·Referrer-Policy·frame-options 방출(SecurityConfig).
+      enabled: true
+  rate-limit:
+    # prod 전용: 인증 엔드포인트 IP×엔드포인트 rate limit(RateLimitConfig).
+    enabled: true
+  password-policy:
+    breach-check:
+      # prod 기본 on — HaveIBeenPwned k-익명 유출 비밀번호 검사를 실제로 동작시킨다(가입·비밀번호 변경·재설정).
+      # default/dev 는 application.yml 에서 off. 원문은 전송하지 않고 SHA-1 prefix 5자만 조회하며,
+      # HIBP 장애 시 fail-open(기본)이라 외부 서비스 문제가 정상 사용자의 가입/변경을 막지 않는다.
+      # 필요 시 TASPA_BREACH_CHECK_ENABLED=false 로 끌 수 있다.
+      enabled: ${TASPA_BREACH_CHECK_ENABLED:true}
+
+  # 메트릭 스크레이핑 자격증명(Prometheus 등)은 **환경변수로만** 주입한다 — 여기에 빈 기본값을 두면
+  # 프로퍼티가 "존재"하는 것으로 판정돼(@ConditionalOnProperty) 빈 비밀번호로 체인이 켜지기 때문이다.
+  #   TASPA_METRICS_SCRAPE_PASSWORD=<강한 랜덤값>   (설정 시 /actuator/prometheus 전용 Basic 체인 활성)
+  #   TASPA_METRICS_SCRAPE_USERNAME=metrics         (선택, 기본 metrics)
+  # 미설정이면 그 경로는 ADMIN 세션 전용이라 스크레이퍼가 인증할 수 없다(메트릭 수집 불가).
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # health/info/prometheus 만 노출, 나머지 차단.
+        include: health,info,prometheus
+  endpoint:
+    health:
+      # liveness/readiness 프로브 분리 노출(오케스트레이터 롤링 배포용).
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+      show-details: never
+  health:
+    # SMTP 는 인증 서버의 생존 조건이 아니다(메일은 비동기·실패 격리). 집계 health 에 mail 기여자가
+    # 들어가면 메일 서버 장애가 컨테이너/LB 에서 "앱 다운"으로 읽혀 재시작·트래픽 차단으로 번진다.
+    # 메일 가용성은 메트릭·발송 실패 로그로 관측한다.
+    mail:
+      enabled: false
+  metrics:
+    tags:
+      application: taspa
+
+logging:
+  level:
+    # 프로덕션 기본 로깅은 INFO/WARN — DEBUG PII 축적·성능 저하 방지.
+    com.taspa: INFO
+    org.springframework.security: WARN
+  structured:
+    format:
+      # Spring Boot 3.4 내장 구조화 로깅 — 별도 의존성(logstash-logback-encoder 등) 없이
+      # 콘솔을 ECS(Elastic Common Schema) JSON 한 줄로 출력한다. 컨테이너 stdout 을 그대로
+      # 수집기(Filebeat/Fluent Bit/Loki)가 파싱할 수 있어 장애 시 필드 검색이 가능하다.
+      # MDC 는 최상위 필드로 자동 포함되므로 CorrelationIdFilter 의 correlationId 가 실린다.
+      # dev/기본 프로파일은 사람이 읽는 평문을 유지한다(application.yml).
+      console: ecs
+    ecs:
+      service:
+        # service.name 기본값은 spring.application.name(=taspa). 다중 환경(스테이징/프로덕션)을
+        # 한 수집기로 모을 때만 환경 라벨을 주입한다(미설정이면 필드 자체가 생략된다).
+        environment: ${TASPA_LOG_SERVICE_ENVIRONMENT:}

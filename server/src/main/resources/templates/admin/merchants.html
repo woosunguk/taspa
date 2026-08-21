@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.merchants.title}">Merchants · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" class="active" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.merchants.listHeading}">Merchants</h2>
+    <div id="merchant-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.merchants.empty}">No merchants</div>
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.merchants.col.name}">Name</th>
+                <th th:text="#{admin.merchants.col.category}">Category</th>
+                <th th:text="#{admin.merchants.col.status}">Status</th>
+                <th th:text="#{admin.merchants.col.site}">Linked site</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="merchant-list"></tbody>
+        </table>
+    </div>
+
+    <hr class="divider">
+
+    <h2 class="auth-title" style="font-size:18px;" id="form-heading" th:text="#{admin.merchants.form.createHeading}">Register a merchant</h2>
+    <div id="merchant-form">
+        <div class="field" style="margin-top:16px;">
+            <label for="m-name" th:text="#{admin.merchants.form.nameLabel}">Name</label>
+            <input type="text" id="m-name" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="m-category" th:text="#{admin.merchants.form.categoryLabel}">Category</label>
+            <select id="m-category">
+                <option value="RESTAURANT" th:text="#{admin.merchants.category.RESTAURANT}">Restaurant</option>
+                <option value="CONVENIENCE" th:text="#{admin.merchants.category.CONVENIENCE}">Convenience store</option>
+                <option value="CAFE" th:text="#{admin.merchants.category.CAFE}">Cafe</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="m-org" th:text="#{admin.merchants.form.orgLabel}">Organization (for site linking)</label>
+            <select id="m-org" onchange="renderSiteOptions(this.value)"></select>
+        </div>
+        <div class="field">
+            <label for="m-site" th:text="#{admin.merchants.form.siteLabel}">Linked site</label>
+            <select id="m-site"></select>
+        </div>
+        <div class="actions end">
+            <button type="button" id="m-cancel" class="btn-secondary hidden" onclick="cancelEdit()" th:text="#{admin.merchants.form.cancel}">Cancel</button>
+            <button type="button" id="m-submit" class="btn-primary" style="width:auto;padding:10px 24px;" onclick="submitMerchant()" th:text="#{admin.merchants.form.create}">Register</button>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        loadFailed: [[#{admin.merchants.js.loadFailed}]],
+        orgSitesLoadFailed: [[#{admin.merchants.js.orgSitesLoadFailed}]],
+        saveFailed: [[#{admin.merchants.js.saveFailed}]],
+        statusFailed: [[#{admin.merchants.js.statusFailed}]],
+        deleteFailed: [[#{admin.merchants.js.deleteFailed}]],
+        createHeading: [[#{admin.merchants.form.createHeading}]],
+        editHeading: [[#{admin.merchants.form.editHeadingTpl}]],
+        create: [[#{admin.merchants.form.create}]],
+        save: [[#{admin.merchants.form.save}]],
+        edit: [[#{admin.merchants.action.edit}]],
+        suspend: [[#{admin.merchants.action.suspend}]],
+        activate: [[#{admin.merchants.action.activate}]],
+        del: [[#{admin.merchants.action.delete}]],
+        deleteConfirm: [[#{admin.merchants.deleteConfirm}]],
+        siteNone: [[#{admin.merchants.form.siteNone}]],
+        orgNone: [[#{admin.merchants.form.orgNone}]],
+        categories: {
+            RESTAURANT: [[#{admin.merchants.category.RESTAURANT}]],
+            CONVENIENCE: [[#{admin.merchants.category.CONVENIENCE}]],
+            CAFE: [[#{admin.merchants.category.CAFE}]],
+        },
+        statuses: {
+            PENDING: [[#{admin.merchants.status.PENDING}]],
+            ACTIVE: [[#{admin.merchants.status.ACTIVE}]],
+            SUSPENDED: [[#{admin.merchants.status.SUSPENDED}]],
+        },
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+            credentials: 'same-origin',
+            body: body ? JSON.stringify(body) : null,
+        });
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/merchants');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(m) { const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); }
+    function clearError() { document.getElementById('error').classList.add('hidden'); }
+    function cell(text, mono) { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; }
+    function linkBtn(text, onclick) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'link'; b.style.cssText = 'background:none;border:none;margin-right:8px;';
+        b.textContent = text; b.onclick = onclick; return b;
+    }
+
+    let merchants = [];
+    let orgs = [];
+    let orgSites = {};   // orgId -> [site]
+    let siteLabel = {};  // siteId -> "org / site"
+    let editingId = null;
+    let editingStatus = null;
+    let editingSiteId = null;      // 편집 대상의 기존 사업장 연결 (프리필 실패 시 보존용)
+    let editSitePrefillOk = true;  // org/사업장 캐시로 사이트 select 프리필이 성공했는지
+
+    function categoryLabel(c) { return (I18N.categories && I18N.categories[c]) || c; }
+    function statusLabel(s) { return (I18N.statuses && I18N.statuses[s]) || s; }
+
+    function renderOrgOptions() {
+        const sel = document.getElementById('m-org');
+        sel.innerHTML = '';
+        const none = document.createElement('option');
+        none.value = ''; none.textContent = I18N.orgNone;
+        sel.appendChild(none);
+        orgs.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.id; opt.textContent = o.name;
+            sel.appendChild(opt);
+        });
+    }
+
+    function renderSiteOptions(orgId) {
+        const sel = document.getElementById('m-site');
+        sel.innerHTML = '';
+        const none = document.createElement('option');
+        none.value = ''; none.textContent = I18N.siteNone;
+        sel.appendChild(none);
+        (orgSites[orgId] || []).forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id; opt.textContent = s.name;
+            sel.appendChild(opt);
+        });
+    }
+
+    function renderMerchants() {
+        const tbody = document.getElementById('merchant-list');
+        tbody.innerHTML = '';
+        document.getElementById('merchant-empty').classList.toggle('hidden', merchants.length > 0);
+        merchants.forEach(m => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(m.name));
+            tr.appendChild(cell(categoryLabel(m.category)));
+            tr.appendChild(cell(statusLabel(m.status)));
+            tr.appendChild(cell(m.siteId ? (siteLabel[m.siteId] || m.siteId) : '-'));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            actions.appendChild(linkBtn(I18N.edit, () => startEdit(m)));
+            const active = m.status === 'ACTIVE';
+            actions.appendChild(linkBtn(active ? I18N.suspend : I18N.activate,
+                () => setStatus(m, active ? 'SUSPENDED' : 'ACTIVE')));
+            actions.appendChild(linkBtn(I18N.del, () => deleteMerchant(m)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadMerchants() {
+        const {ok, data} = await api('GET', '/api/admin/merchants');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        merchants = data;
+        renderMerchants();
+    }
+
+    /** 상태 토글 — update 는 full-replace 라 나머지 필드를 현재값 그대로 보낸다. */
+    async function setStatus(m, status) {
+        clearError();
+        const {ok, data, reauth} = await api('PUT', '/api/admin/merchants/' + encodeURIComponent(m.id),
+            {name: m.name, category: m.category, status, siteId: m.siteId});
+        if (reauth) return;
+        if (!ok) { showError(data.message || I18N.statusFailed); return; }
+        loadMerchants();
+    }
+
+    function startEdit(m) {
+        clearError();
+        editingId = m.id;
+        editingStatus = m.status; // 상태는 별도 토글로만 변경 — 편집 저장 시 현재값 유지.
+        document.getElementById('form-heading').textContent = I18N.editHeading.replace('{0}', m.name);
+        document.getElementById('m-name').value = m.name;
+        document.getElementById('m-category').value = m.category;
+        // 연결 사업장이 속한 org 를 찾아 프리필한다.
+        let orgId = '';
+        if (m.siteId) {
+            for (const oid of Object.keys(orgSites)) {
+                if (orgSites[oid].some(s => s.id === m.siteId)) { orgId = oid; break; }
+            }
+        }
+        document.getElementById('m-org').value = orgId;
+        renderSiteOptions(orgId);
+        const siteSel = document.getElementById('m-site');
+        siteSel.value = m.siteId || '';
+        // org/사업장 로드 실패 등으로 프리필이 안 되면(옵션 부재) 저장 시 기존 연결을 보존한다.
+        editingSiteId = m.siteId || null;
+        editSitePrefillOk = !m.siteId || siteSel.value === m.siteId;
+        document.getElementById('m-submit').textContent = I18N.save;
+        document.getElementById('m-cancel').classList.remove('hidden');
+        document.getElementById('merchant-form').scrollIntoView({behavior: 'smooth'});
+    }
+
+    function cancelEdit() { resetForm(); }
+
+    function resetForm() {
+        editingId = null;
+        editingStatus = null;
+        editingSiteId = null;
+        editSitePrefillOk = true;
+        document.getElementById('form-heading').textContent = I18N.createHeading;
+        document.getElementById('m-name').value = '';
+        document.getElementById('m-category').value = 'RESTAURANT';
+        document.getElementById('m-org').value = '';
+        renderSiteOptions('');
+        document.getElementById('m-submit').textContent = I18N.create;
+        document.getElementById('m-cancel').classList.add('hidden');
+    }
+
+    async function submitMerchant() {
+        clearError();
+        const selectedSiteId = document.getElementById('m-site').value || null;
+        const body = {
+            name: document.getElementById('m-name').value.trim(),
+            category: document.getElementById('m-category').value,
+            // 프리필 실패 상태에서 사용자가 새로 고르지 않았다면 기존 연결을 유지 —
+            // full-replace PUT 이 siteId:null 로 연결을 조용히 해제하는 것을 방지.
+            siteId: (editingId && !editSitePrefillOk && !selectedSiteId) ? editingSiteId : selectedSiteId,
+            // 등록은 status 미지정(서버 기본 ACTIVE), 편집은 현재 상태 유지.
+            status: editingId ? editingStatus : null,
+        };
+        const res = editingId
+            ? await api('PUT', '/api/admin/merchants/' + encodeURIComponent(editingId), body)
+            : await api('POST', '/api/admin/merchants', body);
+        if (res.reauth) return;
+        if (!res.ok) { showError(res.data.message || I18N.saveFailed); return; }
+        resetForm();
+        loadMerchants();
+    }
+
+    async function deleteMerchant(m) {
+        clearError();
+        if (!confirm(I18N.deleteConfirm.replace('{0}', m.name))) return;
+        const {ok, data, reauth} = await api('DELETE', '/api/admin/merchants/' + encodeURIComponent(m.id));
+        if (reauth) return;
+        // 승인 거래 이력이 있으면 FK 로 409 — 서버 message 를 우선 안내(운영 경로는 정지 전환).
+        if (!ok) { showError(data.message || I18N.deleteFailed); return; }
+        loadMerchants();
+    }
+
+    async function init() {
+        const orgsRes = await api('GET', '/api/admin/orgs');
+        let orgSitesLoadFailed = !orgsRes.ok;
+        if (orgsRes.ok) {
+            orgs = orgsRes.data;
+            renderOrgOptions();
+            // 사업장 이름 매핑(목록 표기·폼 select) — org 별 병렬 로드, 실패는 배너로 알린다.
+            await Promise.all(orgs.map(async o => {
+                const r = await api('GET', '/api/orgs/' + encodeURIComponent(o.id) + '/sites');
+                if (r.ok) {
+                    orgSites[o.id] = r.data;
+                    r.data.forEach(s => { siteLabel[s.id] = o.name + ' / ' + s.name; });
+                } else {
+                    orgSitesLoadFailed = true;
+                }
+            }));
+        }
+        if (orgSitesLoadFailed) showError(I18N.orgSitesLoadFailed);
+        renderSiteOptions('');
+        await loadMerchants();
+    }
+
+    init();
+</script>
+</body>
+</html>

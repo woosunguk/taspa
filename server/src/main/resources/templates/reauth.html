@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{common.title.verifyIdentity}">Verify it's you · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{reauth.heading}">Verify it's you to continue</h1>
+    <p class="auth-subtitle" th:text="#{reauth.subtitle}">This is a sensitive action, so we need to verify it's you again</p>
+
+    <div class="email-chip">
+        <span class="dot" th:text="${#strings.substring(email,0,1)}">u</span>
+        <span th:text="${email}">user@example.com</span>
+    </div>
+
+    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+    <div id="passkey-error" class="alert alert-error hidden"></div>
+
+    <form th:if="${hasPassword}" method="post" action="/reauth">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <input type="hidden" name="continue" th:value="${continuePath}">
+        <div class="field">
+            <label for="password" th:text="#{common.passwordEnter}">Enter your password</label>
+            <input type="password" id="password" name="password" autofocus required>
+        </div>
+        <div class="actions end">
+            <button type="submit" class="btn-primary" th:text="#{common.confirm}">Confirm</button>
+        </div>
+    </form>
+
+    <div class="stack-links" th:if="${hasPasskeys}">
+        <button type="button" class="link" id="reauth-passkey" style="background:none;border:none;cursor:pointer;"
+                th:text="#{common.usePasskey}">Use a passkey</button>
+    </div>
+
+    <!-- 소셜 전용 계정(비밀번호·패스키 없음)의 step-up 데드엔드 방지: 연결된 소셜 계정으로 재인증 -->
+    <div class="stack-links" th:if="${!#lists.isEmpty(socialProviders)}">
+        <a th:each="p : ${socialProviders}"
+           class="link"
+           th:href="@{'/reauth/social/' + ${p.id}(continue=${continuePath})}"
+           th:text="#{reauth.social.confirmWith(${p.label})}">Verify with your Kakao account</a>
+    </div>
+
+    <p class="hint" th:if="${!hasPassword and !hasPasskeys and #lists.isEmpty(socialProviders)}"
+       th:text="#{reauth.noMethods}">
+        This account has no password or passkey, so identity verification cannot proceed.
+    </p>
+</main>
+
+<script th:if="${hasPasskeys}" th:inline="javascript">
+    // 패스키 재인증: 기존 /webauthn/authenticate/options + POST /login/webauthn 재사용.
+    // 성공하면 서버가 auth_time 을 갱신하므로 continue 경로로 복귀만 하면 된다.
+    const csrfHeaderName = /*[[${_csrf.headerName}]]*/ 'X-CSRF-TOKEN';
+    const csrfToken = /*[[${_csrf.token}]]*/ '';
+    const continuePath = /*[[${continuePath}]]*/ '/account';
+    const MSG_PASSKEY_FAILED = /*[[#{reauth.passkeyFailed}]]*/ 'Passkey authentication failed. Try again or enter your password.';
+
+    const b64url = {
+        encode: (buffer) => window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_'),
+        decode: (value) => {
+            const binStr = window.atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+            const bin = new Uint8Array(binStr.length);
+            for (let i = 0; i < binStr.length; i++) bin[i] = binStr.charCodeAt(i);
+            return bin.buffer;
+        },
+    };
+
+    async function reauthWithPasskey() {
+        const err = document.getElementById('passkey-error');
+        err.classList.add('hidden');
+        try {
+            const optionsRes = await fetch('/webauthn/authenticate/options', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+                credentials: 'same-origin',
+            });
+            if (!optionsRes.ok) throw new Error('HTTP ' + optionsRes.status);
+            const options = await optionsRes.json();
+            const publicKey = {
+                ...options,
+                challenge: b64url.decode(options.challenge),
+                allowCredentials: (options.allowCredentials || []).map(c => ({...c, id: b64url.decode(c.id)})),
+            };
+            const credential = await navigator.credentials.get({publicKey});
+            const body = {
+                id: credential.id,
+                rawId: b64url.encode(credential.rawId),
+                response: {
+                    authenticatorData: b64url.encode(credential.response.authenticatorData),
+                    clientDataJSON: b64url.encode(credential.response.clientDataJSON),
+                    signature: b64url.encode(credential.response.signature),
+                    userHandle: credential.response.userHandle ? b64url.encode(credential.response.userHandle) : null,
+                },
+                type: credential.type,
+                clientExtensionResults: credential.getClientExtensionResults(),
+                authenticatorAttachment: credential.authenticatorAttachment,
+            };
+            const loginRes = await fetch('/login/webauthn', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', [csrfHeaderName]: csrfToken},
+                credentials: 'same-origin',
+                body: JSON.stringify(body),
+            });
+            if (!loginRes.ok) throw new Error('HTTP ' + loginRes.status);
+            window.location.href = continuePath;
+        } catch (e) {
+            console.error(e);
+            err.textContent = MSG_PASSKEY_FAILED;
+            err.classList.remove('hidden');
+        }
+    }
+
+    document.getElementById('reauth-passkey').addEventListener('click', reauthWithPasskey);
+</script>
+</body>
+</html>

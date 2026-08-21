@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"lsof -nP -iTCP:9100 -sTCP:LISTEN -t | head -1; tail -3 /tmp/taspa-server.log\",\"description\":\"Check if dev server survived\"}",
+  "error": "Exit code 1\ntail: /tmp/taspa-server.log: No such file or directory",
+  "timestamp": "2026-08-03T00:48:49.276Z",
+  "retry_count": 1
+}

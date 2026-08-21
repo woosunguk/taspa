@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.calendar.title}">Calendar · taspa</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" class="active" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div id="error" class="alert alert-error hidden"></div>
+    <div id="notice" class="alert alert-info hidden"></div>
+
+    <div class="field" style="margin-top:8px;">
+        <label for="org-select" th:text="#{admin.calendar.orgSelectLabel}">Organization</label>
+        <select id="org-select" onchange="onOrgChange()"
+                style="width:100%;padding:13px 15px;font-size:14px;border:1px solid var(--taspa-border);border-radius:4px;">
+            <option value="" th:text="#{admin.calendar.orgSelectPlaceholder}">Select an organization</option>
+        </select>
+    </div>
+
+    <div id="feed-section" class="hidden">
+        <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.calendar.feeds.heading}">Feeds</h2>
+        <div id="feed-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.calendar.feeds.empty}">No feeds</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{admin.calendar.feeds.col.name}">Name</th>
+                    <th th:text="#{admin.calendar.feeds.col.type}">Type</th>
+                    <th th:text="#{admin.calendar.feeds.col.source}">Source</th>
+                    <th th:text="#{admin.calendar.feeds.col.enabled}">Enabled</th>
+                    <th th:text="#{admin.calendar.feeds.col.lastSync}">Last synced</th>
+                    <th th:text="#{admin.calendar.feeds.col.status}">Status</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="feed-list"></tbody>
+            </table>
+        </div>
+
+        <hr class="divider">
+
+        <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.calendar.create.heading}">Register a feed</h2>
+        <div class="field" style="margin-top:16px;">
+            <label for="feed-name" th:text="#{admin.calendar.create.nameLabel}">Name</label>
+            <input type="text" id="feed-name" autocomplete="off">
+        </div>
+        <p class="hint" style="margin:0 0 4px;" th:text="#{admin.calendar.create.typeLabel}">Type</p>
+        <div class="check-row">
+            <label><input type="radio" name="feed-type" value="HOLIDAY" checked> HOLIDAY</label>
+            <label><input type="radio" name="feed-type" value="WORK"> WORK</label>
+            <label><input type="radio" name="feed-type" value="EVENT"> EVENT</label>
+        </div>
+        <p class="hint" style="margin:12px 0 4px;" th:text="#{admin.calendar.create.modeLabel}">Ingestion mode</p>
+        <div class="check-row">
+            <label><input type="radio" name="feed-mode" value="subscription" checked onchange="onModeChange()"> <span th:text="#{admin.calendar.create.modeSubscription}">Subscription URL</span></label>
+            <label><input type="radio" name="feed-mode" value="upload" onchange="onModeChange()"> <span th:text="#{admin.calendar.create.modeUpload}">Upload .ics</span></label>
+        </div>
+        <div class="field" id="source-url-field">
+            <label for="feed-source-url" th:text="#{admin.calendar.create.sourceUrlLabel}">Subscription URL (https only, SSRF-guarded)</label>
+            <input type="text" id="feed-source-url" autocomplete="off">
+        </div>
+        <div class="field hidden" id="ics-field">
+            <label for="feed-ics" th:text="#{admin.calendar.create.icsLabel}">.ics content (paste)</label>
+            <textarea id="feed-ics" rows="6"
+                      style="width:100%;padding:13px 15px;font-size:12px;border:1px solid var(--taspa-border);border-radius:4px;font-family:monospace;"></textarea>
+        </div>
+        <div class="actions end">
+            <button type="button" class="btn-primary" onclick="createFeed()" th:text="#{admin.calendar.create.submit}">Register</button>
+        </div>
+    </div>
+
+    <!-- 이벤트 미리보기 -->
+    <div id="events-panel" class="hidden">
+        <hr class="divider">
+        <h2 class="auth-title" style="font-size:18px;" id="events-title" th:text="#{admin.calendar.events.heading}">Recent events</h2>
+        <div id="events-empty" class="hint hidden" style="margin-top:8px;" th:text="#{admin.calendar.events.empty}">No events</div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr>
+                    <th th:text="#{admin.calendar.events.col.summary}">Summary</th>
+                    <th th:text="#{admin.calendar.events.col.category}">Category</th>
+                    <th th:text="#{admin.calendar.events.col.starts}">Starts</th>
+                    <th th:text="#{admin.calendar.events.col.source}">Source</th>
+                </tr>
+                </thead>
+                <tbody id="events-list"></tbody>
+            </table>
+        </div>
+        <div class="actions" style="gap:12px;">
+            <button type="button" class="btn-secondary" id="events-prev" onclick="eventsPage(-1)" th:text="#{admin.calendar.events.prev}">Prev</button>
+            <button type="button" class="btn-secondary" id="events-next" onclick="eventsPage(1)" th:text="#{admin.calendar.events.next}">Next</button>
+        </div>
+    </div>
+</main>
+
+<script th:inline="javascript">
+    window.I18N = {
+        upload: [[#{admin.calendar.feeds.upload}]],
+        enabledYes: [[#{admin.calendar.enabled.yes}]],
+        enabledNo: [[#{admin.calendar.enabled.no}]],
+        sync: [[#{admin.calendar.action.sync}]],
+        enable: [[#{admin.calendar.action.enable}]],
+        disable: [[#{admin.calendar.action.disable}]],
+        del: [[#{admin.calendar.action.delete}]],
+        preview: [[#{admin.calendar.action.preview}]],
+        eventsTitle: [[#{admin.calendar.events.titleTpl}]],
+        loadFailed: [[#{admin.calendar.js.loadFailed}]],
+        createFailed: [[#{admin.calendar.js.createFailed}]],
+        syncFailed: [[#{admin.calendar.js.syncFailed}]],
+        syncDone: [[#{admin.calendar.js.syncDone}]],
+        toggleFailed: [[#{admin.calendar.js.toggleFailed}]],
+        deleteFailed: [[#{admin.calendar.js.deleteFailed}]],
+        deleteConfirm: [[#{admin.calendar.js.deleteConfirm}]],
+        importFailed: [[#{admin.calendar.js.importFailed}]],
+    };
+</script>
+<script>
+    const csrfHeaderName = document.querySelector('meta[name="_csrf_header"]').content;
+    const csrfToken = document.querySelector('meta[name="_csrf"]').content;
+
+    async function api(method, url, body, rawText) {
+        const headers = {[csrfHeaderName]: csrfToken};
+        let payload = null;
+        if (rawText != null) { headers['Content-Type'] = 'text/calendar'; payload = rawText; }
+        else if (body != null) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
+        const res = await fetch(url, {method, headers, credentials: 'same-origin', body: payload});
+        const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+        if (res.status === 401 && data && data.errorCode === 'REAUTH_REQUIRED') {
+            window.location.href = '/reauth?continue=' + encodeURIComponent('/admin/calendar');
+            return {ok: false, data, reauth: true};
+        }
+        return {ok: res.ok, status: res.status, data};
+    }
+
+    function showError(m) { document.getElementById('notice').classList.add('hidden'); const el = document.getElementById('error'); el.textContent = m; el.classList.remove('hidden'); }
+    function showNotice(m) { document.getElementById('error').classList.add('hidden'); const el = document.getElementById('notice'); el.textContent = m; el.classList.remove('hidden'); }
+    function clearMsg() { document.getElementById('error').classList.add('hidden'); document.getElementById('notice').classList.add('hidden'); }
+    function cell(text, mono) { const td = document.createElement('td'); td.textContent = text; if (mono) td.style.fontFamily = 'monospace'; return td; }
+    function linkBtn(text, onclick) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'link'; b.style.cssText = 'background:none;border:none;margin-right:8px;';
+        b.textContent = text; b.onclick = onclick; return b;
+    }
+
+    let currentOrg = '';
+    let previewFeedId = null;
+    let previewPage = 0;
+
+    async function loadOrgs() {
+        const {ok, data} = await api('GET', '/api/admin/orgs');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        const sel = document.getElementById('org-select');
+        data.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.id; opt.textContent = o.name + ' (' + o.slug + ')';
+            sel.appendChild(opt);
+        });
+    }
+
+    function onOrgChange() {
+        clearMsg();
+        currentOrg = document.getElementById('org-select').value;
+        document.getElementById('events-panel').classList.add('hidden');
+        if (!currentOrg) { document.getElementById('feed-section').classList.add('hidden'); return; }
+        document.getElementById('feed-section').classList.remove('hidden');
+        loadFeeds();
+    }
+
+    function onModeChange() {
+        const upload = document.querySelector('input[name="feed-mode"]:checked').value === 'upload';
+        document.getElementById('ics-field').classList.toggle('hidden', !upload);
+        document.getElementById('source-url-field').classList.toggle('hidden', upload);
+    }
+
+    function fmt(instant) { return instant ? new Date(instant).toLocaleString() : '-'; }
+
+    async function loadFeeds() {
+        const {ok, data} = await api('GET', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds');
+        if (!ok) { showError(I18N.loadFailed); return; }
+        const tbody = document.getElementById('feed-list');
+        tbody.innerHTML = '';
+        document.getElementById('feed-empty').classList.toggle('hidden', data.length > 0);
+        data.forEach(f => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(f.name));
+            tr.appendChild(cell(f.type));
+            tr.appendChild(cell(f.subscription ? f.sourceUrl : I18N.upload, true));
+            tr.appendChild(cell(f.enabled ? I18N.enabledYes : I18N.enabledNo));
+            tr.appendChild(cell(fmt(f.lastSyncedAt)));
+            tr.appendChild(cell(f.lastSyncStatus || '-'));
+            const actions = document.createElement('td');
+            actions.style.whiteSpace = 'nowrap';
+            if (f.subscription) actions.appendChild(linkBtn(I18N.sync, () => syncFeed(f)));
+            actions.appendChild(linkBtn(f.enabled ? I18N.disable : I18N.enable, () => toggleFeed(f)));
+            actions.appendChild(linkBtn(I18N.preview, () => openPreview(f)));
+            actions.appendChild(linkBtn(I18N.del, () => deleteFeed(f)));
+            tr.appendChild(actions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function createFeed() {
+        clearMsg();
+        const name = document.getElementById('feed-name').value.trim();
+        const type = document.querySelector('input[name="feed-type"]:checked').value;
+        const mode = document.querySelector('input[name="feed-mode"]:checked').value;
+        const sourceUrl = mode === 'subscription' ? document.getElementById('feed-source-url').value.trim() : null;
+        const {ok, data} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds', {name, type, sourceUrl});
+        if (!ok) { showError(data.message || I18N.createFailed); return; }
+        // 업로드 모드면 방금 만든 피드에 .ics 본문을 곧바로 임포트한다.
+        if (mode === 'upload') {
+            const ics = document.getElementById('feed-ics').value;
+            const r = await api('POST', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds/' + encodeURIComponent(data.id) + '/import', null, ics);
+            if (!r.ok) { showError((r.data && r.data.message) || I18N.importFailed); return; }
+            showNotice(I18N.syncDone.replace('{0}', r.data.imported));
+        }
+        document.getElementById('feed-name').value = '';
+        document.getElementById('feed-source-url').value = '';
+        document.getElementById('feed-ics').value = '';
+        loadFeeds();
+    }
+
+    async function syncFeed(f) {
+        clearMsg();
+        const {ok, data} = await api('POST', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds/' + encodeURIComponent(f.id) + '/sync');
+        if (!ok) { showError((data && data.message) || I18N.syncFailed); return; }
+        showNotice(I18N.syncDone.replace('{0}', data.imported));
+        loadFeeds();
+    }
+
+    async function toggleFeed(f) {
+        clearMsg();
+        const {ok, data} = await api('PATCH', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds/' + encodeURIComponent(f.id), {enabled: !f.enabled});
+        if (!ok) { showError((data && data.message) || I18N.toggleFailed); return; }
+        loadFeeds();
+    }
+
+    async function deleteFeed(f) {
+        clearMsg();
+        if (!confirm(I18N.deleteConfirm.replace('{0}', f.name))) return;
+        const {ok, data} = await api('DELETE', '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds/' + encodeURIComponent(f.id));
+        if (!ok) { showError((data && data.message) || I18N.deleteFailed); return; }
+        if (previewFeedId === f.id) document.getElementById('events-panel').classList.add('hidden');
+        loadFeeds();
+    }
+
+    function openPreview(f) {
+        previewFeedId = f.id;
+        previewPage = 0;
+        document.getElementById('events-panel').classList.remove('hidden');
+        document.getElementById('events-title').textContent = I18N.eventsTitle.replace('{0}', f.name);
+        loadEvents();
+    }
+
+    function eventsPage(delta) {
+        previewPage = Math.max(0, previewPage + delta);
+        loadEvents();
+    }
+
+    async function loadEvents() {
+        const url = '/api/admin/orgs/' + encodeURIComponent(currentOrg) + '/calendar/feeds/' + encodeURIComponent(previewFeedId) + '/events?page=' + previewPage;
+        const {ok, data} = await api('GET', url);
+        if (!ok) { showError(I18N.loadFailed); return; }
+        const tbody = document.getElementById('events-list');
+        tbody.innerHTML = '';
+        document.getElementById('events-empty').classList.toggle('hidden', data.items.length > 0);
+        data.items.forEach(e => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(e.summary || '-'));
+            tr.appendChild(cell(e.category || '-'));
+            tr.appendChild(cell(fmt(e.startsAt)));
+            tr.appendChild(cell(e.source));
+            tbody.appendChild(tr);
+        });
+        document.getElementById('events-prev').disabled = previewPage === 0;
+        document.getElementById('events-next').disabled = !data.hasNext;
+    }
+
+    loadOrgs();
+</script>
+</body>
+</html>

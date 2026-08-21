@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{admin.dashboard.title}">Admin Console · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card admin-card">
+    <div class="admin-header">
+        <div class="wordmark"><b>taspa</b> <span th:text="#{admin.console}">Admin Console</span></div>
+        <div class="admin-account">
+            <a class="link" href="/account" th:text="#{common.myAccount}">My account</a>
+            <form method="post" action="/logout" style="margin:0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn-secondary" th:text="#{common.logout}">Log out</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin" class="active" th:text="#{admin.nav.dashboard}">Dashboard</a>
+        <a href="/admin/clients" th:text="#{admin.nav.clients}">Clients</a>
+        <a href="/admin/orgs" th:text="#{admin.nav.orgs}">Organizations</a>
+        <a href="/admin/calendar" th:text="#{admin.nav.calendar}">Calendar</a>
+        <a href="/admin/merchants" th:text="#{admin.nav.merchants}">Merchants</a>
+        <a href="/admin/users" th:text="#{admin.nav.users}">Users</a>
+        <a href="/admin/sso" th:text="#{admin.nav.sso}">Enterprise SSO</a>
+        <a href="/admin/audit" th:text="#{admin.nav.audit}">Audit log</a>
+        <a href="/admin/iam" th:text="#{admin.nav.iam}">IAM</a>
+    </nav>
+
+    <div class="stat-grid">
+        <div class="stat-box">
+            <div class="num" th:text="${userCount}">0</div>
+            <div class="label" th:text="#{admin.dashboard.stat.users}">Users</div>
+        </div>
+        <div class="stat-box">
+            <div class="num" th:text="${clientCount}">0</div>
+            <div class="label" th:text="#{admin.dashboard.stat.clients}">Clients</div>
+        </div>
+        <div class="stat-box">
+            <div class="num" th:text="${activeSessionCount}">0</div>
+            <div class="label" th:text="#{admin.dashboard.stat.sessions}">Active sessions</div>
+        </div>
+    </div>
+
+    <h2 class="auth-title" style="font-size:18px;" th:text="#{admin.recentEvents}">Recent audit events</h2>
+    <div th:if="${#lists.isEmpty(recentEvents)}" class="hint" style="margin-top:8px;" th:text="#{admin.emptyEvents}">No audit events</div>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(recentEvents)}">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th th:text="#{admin.col.time}">Time</th>
+                <th th:text="#{admin.col.type}">Type</th>
+                <th th:text="#{admin.col.user}">User</th>
+                <th th:text="#{admin.col.detail}">Details</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${recentEvents}">
+                <td th:text="${#temporals.format(e.createdAt, 'yyyy-MM-dd HH:mm:ss')}">2026-01-01 00:00:00</td>
+                <td th:text="${e.type}">LOGIN_SUCCESS</td>
+                <td th:text="${e.email} ?: '-'">user@example.com</td>
+                <td class="detail-cell" th:text="${e.detail} ?: ''">{}</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

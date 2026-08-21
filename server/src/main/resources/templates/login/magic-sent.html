@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html th:lang="${#locale.language}" lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="#{login.magicSent.title}">Sign-in link sent · taspa</title>
+    <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<main class="auth-card">
+    <div class="wordmark"><b>taspa</b></div>
+    <h1 class="auth-title" th:text="#{login.magicSent.heading}">Check your inbox</h1>
+    <!-- 계정 존재 여부와 무관하게 항상 같은 안내를 보여준다(이메일 열거 공격 방지). -->
+    <p class="auth-subtitle" th:text="#{login.magicSent.subtitle(${email})}">
+        We sent a sign-in link to your email.
+    </p>
+    <div class="stack-links">
+        <a class="link" href="/login/password" th:text="#{login.magicSent.usePassword}">Sign in with password</a>
+    </div>
+</main>
+</body>
+</html>

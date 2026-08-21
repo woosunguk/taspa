@@ -1,0 +1,19 @@
+# 통합 테스트에서 JavaMailSender 를 @MockkBean 으로 대체하면 actuator mail 헬스 기여자가
+# "Beans must not be empty" 로 컨텍스트 로딩을 실패시키므로 mail 헬스 체크를 비활성화한다.
+management:
+  health:
+    mail:
+      enabled: false
+
+# 리스크 기반 인증은 unseenDevice 신호가 모든 "첫 로그인"에 발동해 기존 시나리오 테스트의
+# 리다이렉트 기대(/account)를 바꾸므로 테스트 기본은 비활성화한다.
+# 리스크 전용 테스트(risk/RiskBasedAuthIntegrationTest)가 @TestPropertySource 로 켠다.
+taspa:
+  risk:
+    enabled: false
+  # ★월 청구서 자동 생성 잡을 테스트에서는 끈다. @EnableScheduling 이 켜져 있어 크론 시각(기본 03:20)에
+  # 테스트가 돌면 잡이 청구서를 만들어 InvoiceIntegrationTest 의 "청구서 행은 하나만" 같은 단언을
+  # 무너뜨린다 — **하루 중 특정 시각에만 깨지는** 종류라 발견이 늦다(끼니창 END_OF_DAY 함정과 같은 형태).
+  # 잡 자체의 회귀는 maintenance/InvoiceGenerationJobIntegrationTest 가 인스턴스를 직접 만들어 검증한다.
+  billing:
+    auto-generate-enabled: false

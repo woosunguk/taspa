@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>demo-client</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f5f6f8; margin: 0; }
+        .card { max-width: 400px; margin: 96px auto; background: #fff; border: 1px solid #dadce0;
+                border-radius: 8px; padding: 40px; text-align: center; }
+        .wordmark { font-size: 22px; margin-bottom: 8px; }
+        .hint { color: #5f6368; font-size: 14px; margin-bottom: 28px; }
+        .btn-primary { display: inline-block; background: #1a73e8; color: #fff; text-decoration: none;
+                       border: none; border-radius: 4px; padding: 10px 24px; font-size: 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<main class="card">
+    <div class="wordmark"><b>demo-client</b></div>
+    <p class="hint">taspa 를 IdP 로 사용하는 OIDC 데모 앱입니다.<br>로그인하면 ID 토큰 클레임을 확인할 수 있습니다.</p>
+    <a class="btn-primary" href="/oauth2/authorization/taspa">taspa로 로그인</a>
+</main>
+</body>
+</html>

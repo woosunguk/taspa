@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/woosunguk/workspace/taspa && ls web/app/console/[orgId]/ && ls web/app/admin/merchants/ && ls web/app/admin/orgs/\",\"description\":\"List directories\"}",
+  "error": "Exit code 1\n(eval):1: no matches found: web/app/console/[orgId]/",
+  "timestamp": "2026-08-02T17:12:34.512Z",
+  "retry_count": 2
+}
