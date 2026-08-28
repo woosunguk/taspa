@@ -33,3 +33,8 @@ e2e/.omc/
 e2e/dark-ui/
 e2e/fold/
 e2e/new-ui/
+e2e/probe/
+e2e/ui-audit*/
+e2e/audit-merchant/
+e2e/journey*/
+e2e/*.png
