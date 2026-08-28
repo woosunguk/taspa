@@ -29,3 +29,7 @@ e2e/test-results/
 .omc/
 web/.omc/
 e2e/.omc/
+# e2e 캡처 산출물(스크린샷 스펙의 출력 — 소스가 아니다)
+e2e/dark-ui/
+e2e/fold/
+e2e/new-ui/
