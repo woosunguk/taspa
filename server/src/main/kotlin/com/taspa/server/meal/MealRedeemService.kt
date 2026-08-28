@@ -60,6 +60,7 @@ class MealRedeemService(
     private val consumptionEventRepository: ConsumptionEventRepository,
     private val refundRepository: MealRefundRepository,
     private val ledgerService: LedgerService,
+    private val menuService: MealMenuService,
 ) {
     /**
      * 승인 흐름(설계 §4 CPM): POS 멱등 재전송 확인 → 토큰 소비(FOR UPDATE·단일사용) → 멤버십 재확인 →
@@ -181,14 +182,20 @@ class MealRedeemService(
         // 소비 이벤트 seam 적재(같은 트랜잭션) — 예측 정답데이터. external_id=auth_id 로 거래와 1:1 결속,
         // site 귀속은 가맹의 운영 사업장(선택, 거래 org 소속일 때만 — 교차 테넌트 site 오귀속 방지).
         // 취소는 같은 멱등키로 VOIDED 재적재(full-replace)된다.
+        val menuRef = resolveMenuRef(transaction, resolveSiteId(merchant, qrToken.orgId), request.menuId)
         consumptionEventService.ingest(
             qrToken.orgId,
-            listOf(consumptionRequestOf(transaction, merchant, resolveSiteId(merchant, qrToken.orgId))),
+            listOf(consumptionRequestOf(transaction, merchant, resolveSiteId(merchant, qrToken.orgId), menuRef)),
         )
         // ★원장도 **같은 트랜잭션**에서 쓴다. 나중에 채우면 그 사이 원장과 장부가 어긋나고, 그 어긋남을
         // 잡으려고 만든 대사가 자기 지연 때문에 매번 경보를 울린다(경보 피로 → 진짜 불일치가 묻힌다).
         ledgerService.recordRedeem(transaction)
-        return RedeemOutcome(toResponse(transaction), mutated = true, orgId = qrToken.orgId, userId = qrToken.userId)
+        return RedeemOutcome(
+            toResponse(transaction, menuName = menuRef),
+            mutated = true,
+            orgId = qrToken.orgId,
+            userId = qrToken.userId,
+        )
     }
 
     /**
@@ -221,7 +228,10 @@ class MealRedeemService(
                 .findByOrgIdAndSourceAndExternalId(transaction.orgId, CONSUMPTION_SOURCE, transaction.authId)
                 ?.siteId
                 ?: resolveSiteId(merchant, transaction.orgId)
-        consumptionEventService.ingest(transaction.orgId, listOf(consumptionRequestOf(transaction, merchant, siteId)))
+        consumptionEventService.ingest(
+            transaction.orgId,
+            listOf(consumptionRequestOf(transaction, merchant, siteId, existingMenuRef(transaction))),
+        )
         return RedeemOutcome(toResponse(transaction), mutated = true, orgId = transaction.orgId, userId = transaction.userId)
     }
 
@@ -375,7 +385,10 @@ class MealRedeemService(
                     .findByOrgIdAndSourceAndExternalId(transaction.orgId, CONSUMPTION_SOURCE, transaction.authId)
                     ?.siteId
                     ?: resolveSiteId(merchant, transaction.orgId)
-            consumptionEventService.ingest(transaction.orgId, listOf(consumptionRequestOf(transaction, merchant, siteId)))
+            consumptionEventService.ingest(
+                transaction.orgId,
+                listOf(consumptionRequestOf(transaction, merchant, siteId, existingMenuRef(transaction))),
+            )
         }
         return RedeemOutcome(
             toResponse(transaction, orgRefunded, selfRefunded),
@@ -394,11 +407,59 @@ class MealRedeemService(
         orgId: UUID,
     ): UUID? = merchant.siteId?.takeIf { siteRepository.findByIdAndOrgId(it, orgId) != null }
 
+    /**
+     * 실적의 **메뉴 귀속** — `consumption_events.menu_ref` 를 채우는 유일한 프로덕션 경로다.
+     * V17 부터 컬럼이 있었지만 채우는 코드가 없어 집계 API 의 `groupBy=menu` 는 항상 null 을 냈다.
+     *
+     * ★**그 끼니의 메뉴가 정확히 하나일 때만** 귀속한다. 여러 개면(A코너/B코너) 단말은 손님이 어느
+     * 코너에서 받았는지 알 수 없고, 아무 쪽이나 고르면 **절반의 확률로 틀린 메뉴의 인기가 올라간다** —
+     * 그 왜곡은 집계에만 나타나 아무도 반증할 수 없다. 모르면 null 로 둔다.
+     *
+     * ★값은 **메뉴 이름**이다(id 가 아니다). 식단 행은 날짜마다 새로 생기므로 id 로 저장하면 같은
+     * "돈까스"가 날마다 다른 키가 되어 **날짜를 넘는 집계가 영구히 불가능**하다 — 메뉴별 인기를 보는 것이
+     * 이 축의 목적이므로 이름이 정확히 그 목적에 맞는 키다. 이름 길이는 `menu_ref`(128) 안에 들어오도록
+     * 서비스가 제한한다(잘라내면 키가 조용히 달라진다).
+     *
+     * ★날짜는 **org-로컬 달력**이다(소비 집계 date 버킷과 같은 앵커). UTC 절단으로 잡으면 KST 아침 식사가
+     * 전날 식단에 귀속된다.
+     *
+     * 잠금·REQUIRES_NEW 를 열지 않는 읽기 한 번이다(멤버십 FOR UPDATE 구간 안에서 호출되므로 —
+     * `MealPolicyResolver` 와 같은 규약).
+     */
+    private fun resolveMenuRef(
+        transaction: MealTransaction,
+        siteId: UUID?,
+        explicitMenuId: UUID?,
+    ): String? {
+        val org = organizationRepository.findById(transaction.orgId).orElse(null) ?: return null
+        val zone = MealPolicyCalculus.zoneOf(org.timezone)
+        val localDate = transaction.approvedAt.atZone(zone).toLocalDate()
+        val menus = menuService.forSlot(transaction.orgId, localDate, transaction.mealWindow, siteId)
+        if (menus.isEmpty()) return null
+        if (explicitMenuId != null) {
+            // 그 끼니의 메뉴 목록 안에서만 찾는다 — 다른 조직·다른 날 메뉴 id 를 보내 실적을 옮기지 못하게.
+            // 못 찾으면 결제는 그대로 승인하고 귀속만 비운다(응답 menuName=null 로 단말이 알 수 있다).
+            return menus.firstOrNull { it.id == explicitMenuId }?.name
+        }
+        return menus.singleOrNull()?.name
+    }
+
+    /**
+     * 재적재(취소·환불)에서 **기존 귀속을 보존**한다. full-replace 계약이라 여기서 다시 계산하면,
+     * 메뉴가 여럿이라 단말이 골라 준 경우의 선택이 null 로 덮여 **사라진다**(그 끼니의 코너별 실적이
+     * 취소 한 건 때문에 조용히 지워진다).
+     */
+    private fun existingMenuRef(transaction: MealTransaction): String? =
+        consumptionEventRepository
+            .findByOrgIdAndSourceAndExternalId(transaction.orgId, CONSUMPTION_SOURCE, transaction.authId)
+            ?.menuRef
+
     /** 거래 → 소비 이벤트 적재 요청(full-replace 계약: 거래의 완전한 현재 상태를 재전송한다). */
     private fun consumptionRequestOf(
         transaction: MealTransaction,
         merchant: Merchant,
         siteId: UUID?,
+        menuRef: String?,
     ): ConsumptionEventWriteRequest =
         ConsumptionEventWriteRequest(
             source = CONSUMPTION_SOURCE,
@@ -406,6 +467,7 @@ class MealRedeemService(
             userSub = transaction.userId,
             merchantId = merchant.id,
             siteId = siteId,
+            menuRef = menuRef,
             mealWindow = transaction.mealWindow,
             quantity = 1,
             status =
@@ -420,6 +482,7 @@ class MealRedeemService(
         transaction: MealTransaction,
         orgRefundedMinor: Long? = null,
         selfRefundedMinor: Long? = null,
+        menuName: String? = null,
     ): RedeemResponse =
         RedeemResponse(
             authId = transaction.authId,
@@ -429,6 +492,7 @@ class MealRedeemService(
             status = transaction.status,
             orgRefundedMinor = orgRefundedMinor,
             selfRefundedMinor = selfRefundedMinor,
+            menuName = menuName,
         )
 
     private companion object {

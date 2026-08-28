@@ -14,6 +14,7 @@ import com.taspa.server.iam.IamContextFactory
 import com.taspa.server.iam.IamPrincipalKind
 import com.taspa.server.iam.Trn
 import com.taspa.server.meal.dto.MerchantIdentityView
+import com.taspa.server.meal.dto.MerchantMenusResponse
 import com.taspa.server.meal.dto.RedeemRequest
 import com.taspa.server.meal.dto.RedeemResponse
 import com.taspa.server.meal.dto.RefundRequest
@@ -49,6 +50,7 @@ class MerchantRedeemController(
     private val auditEventService: AuditEventService,
     private val iamShadowService: IamAuthorizationService,
     private val iamContextFactory: IamContextFactory,
+    private val merchantMenuLookup: MerchantMenuLookup,
 ) {
     /**
      * **이 단말이 어느 매장으로 결제하는가.**
@@ -73,8 +75,22 @@ class MerchantRedeemController(
                 name = merchant.name,
                 category = merchant.category,
                 timezone = merchant.timezone,
+                defaultPriceMinor = merchant.defaultPriceMinor,
             ),
         )
+    }
+
+    /**
+     * 오늘 이 시각 끼니의 식단 — POS 가 배식 코너 버튼을 그리기 위한 목록.
+     *
+     * 인가는 [me] 와 같은 이유로 **승인과 같은 action**(`meal:Redeem`)이다. 새 action 을 만들면 이미
+     * 발급된 단말 클라이언트가 전부 거부되고, "결제할 수 있는 단말이 오늘 메뉴 이름을 아는 것"은 이미
+     * 가진 능력보다 좁다.
+     */
+    @GetMapping("/menus")
+    fun menus(authentication: Authentication): ResponseEntity<MerchantMenusResponse> {
+        val merchant = authorizeWithShadow(authentication, IamActions.MEAL_REDEEM, "MerchantRedeemController.menus")
+        return ResponseEntity.ok(merchantMenuLookup.today(merchant))
     }
 
     @PostMapping("/redeem")

@@ -119,6 +119,15 @@ data class RedeemRequest(
     val token: String = "",
     val amountMinor: Long = 0,
     val posTxnId: String = "",
+    /**
+     * 손님이 받은 메뉴(선택). 한 끼니에 메뉴가 여러 개일 때 **단말만이 알 수 있는 정보**다 —
+     * 서버가 추측하면 절반의 확률로 틀린 메뉴의 인기가 올라가고 그 왜곡은 집계에만 나타난다.
+     *
+     * ★해석에 실패해도(다른 조직 메뉴·그 끼니에 없는 메뉴·삭제된 메뉴) **결제를 거절하지 않는다.**
+     * 메뉴는 분석 축이고 결제는 돈이다 — 메타데이터 불일치로 손님을 계산대에 세워 둘 이유가 없다.
+     * 대신 응답의 `menuName` 이 null 로 와서 단말이 "메뉴 미기록"을 알 수 있다(조용히 삼키지 않는다).
+     */
+    val menuId: java.util.UUID? = null,
 )
 
 /**
@@ -131,6 +140,11 @@ data class RedeemResponse(
     val selfPaidMinor: Long,
     val mealWindow: String,
     val status: String,
+    /**
+     * 이 거래에 귀속된 메뉴 이름. null 이면 기록되지 않았다는 뜻이다(그 끼니에 식단이 없거나,
+     * 메뉴가 여럿인데 단말이 고르지 않았거나, 보낸 menuId 가 그 끼니의 메뉴가 아니었다).
+     */
+    val menuName: String? = null,
     /**
      * 이번 환불에서 **각자에게 돌아간 금액**. 환불 응답에만 채워진다(승인·취소는 null).
      *

@@ -94,6 +94,7 @@ class GlobalExceptionHandler(
                 ErrorCode.IAM_CONFLICT -> HttpStatus.CONFLICT
                 ErrorCode.IAM_LOCKOUT -> HttpStatus.CONFLICT
                 ErrorCode.MEAL_POLICY_OVERRIDE_EXISTS -> HttpStatus.CONFLICT
+                ErrorCode.MEAL_MENU_EXISTS -> HttpStatus.CONFLICT
                 ErrorCode.METHOD_NOT_ALLOWED -> HttpStatus.METHOD_NOT_ALLOWED
                 ErrorCode.UNSUPPORTED_MEDIA_TYPE -> HttpStatus.UNSUPPORTED_MEDIA_TYPE
                 ErrorCode.INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR

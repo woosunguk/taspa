@@ -56,6 +56,7 @@ enum class ErrorCode(
     // 부서·사업장 식대 정책 재정의 — 노드당 상시 재정의는 1행(DB 부분 유니크). 사용자에게는
     // "새로 만들 게 아니라 기존 것을 고쳐야 한다"가 정확한 안내다.
     MEAL_POLICY_OVERRIDE_EXISTS("A standing meal policy override already exists for this scope"),
+    MEAL_MENU_EXISTS("A menu with this name already exists for that meal slot"),
 
     // IAM 정책 관리(RBAC) — 정책 문서 검증·불변성·이름 충돌.
     IAM_POLICY_NOT_FOUND("IAM policy not found"),
