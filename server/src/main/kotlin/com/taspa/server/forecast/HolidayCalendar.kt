@@ -45,6 +45,11 @@ class HolidayCalendar(
         orgId: UUID,
         from: LocalDate,
         to: LocalDate,
+        /**
+         * 사내 행사도 함께 인덱싱할지. **기본 false** — 행사 신호를 켠 조회만 질의를 추가한다
+         * (끈 조회의 동작·비용이 도입 전과 정확히 같아야 한다).
+         */
+        includeEvents: Boolean = false,
     ): HolidayIndex {
         if (to.isBefore(from)) return HolidayIndex.EMPTY
         val queryFrom = from.minusDays(MAX_SPAN_DAYS).atStartOfDay(ZoneOffset.UTC).toInstant()
@@ -75,7 +80,35 @@ class HolidayCalendar(
                 }
             }
         }
-        return HolidayIndex(byDate)
+        val eventsByDate =
+            if (includeEvents) {
+                val eventRows =
+                    eventRepository.findEventWindow(
+                        orgId,
+                        queryFrom,
+                        queryTo,
+                        PageRequest.of(0, ROW_LIMIT, Sort.by(Sort.Direction.ASC, "startsAt")),
+                    )
+                if (eventRows.size >= ROW_LIMIT) {
+                    // 휴일과 같은 이유로 fail-loud — 잘린 날의 행사가 "평일"로 보이면 basis 선택이 틀리고
+                    // 그 왜곡은 응답에 드러나지 않는다.
+                    throw AuthException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "행사 캘린더 규모가 상한(${ROW_LIMIT}건)에 도달했습니다 — 조회 창(from/to)을 줄여 다시 시도하세요",
+                    )
+                }
+                HashMap<LocalDate, String?>().also { acc ->
+                    eventRows.forEach { event ->
+                        val name = event.summary?.trim()?.takeIf { it.isNotEmpty() }
+                        datesOf(event).forEach { date ->
+                            if (!date.isBefore(from) && !date.isAfter(to)) acc.putIfAbsent(date, name)
+                        }
+                    }
+                }
+            } else {
+                emptyMap()
+            }
+        return HolidayIndex(byDate, eventsByDate)
     }
 
     /** 이벤트가 덮는 날짜들(UTC 벽시계 기준, DTEND 배타). 손상된 장기 이벤트는 [MAX_SPAN_DAYS] 로 잘라 폭주를 막는다. */
@@ -106,10 +139,21 @@ class HolidayCalendar(
  */
 class HolidayIndex(
     private val byDate: Map<LocalDate, String?>,
-) {
-    fun isHoliday(date: LocalDate): Boolean = byDate.containsKey(date)
+    /**
+     * 사내 행사 날짜 → 이름. **휴일과 별도 맵**이다 — 하루가 둘 다일 수 있고(창립기념 행사가 휴무인 조직),
+     * 그때 배식 여부를 정하는 것은 휴일 쪽이므로 [HolidayLookup.classOf] 가 휴일을 우선한다.
+     *
+     * 비어 있으면 도입 전과 동작이 정확히 같다 — 행사 신호를 끈 조회는 이 맵을 채우지 않는다.
+     */
+    private val eventsByDate: Map<LocalDate, String?> = emptyMap(),
+) : HolidayLookup {
+    override fun isHoliday(date: LocalDate): Boolean = byDate.containsKey(date)
 
-    fun nameOf(date: LocalDate): String? = byDate[date]
+    override fun nameOf(date: LocalDate): String? = byDate[date]
+
+    override fun isEvent(date: LocalDate): Boolean = eventsByDate.containsKey(date)
+
+    override fun eventNameOf(date: LocalDate): String? = eventsByDate[date]
 
     companion object {
         /** 캘린더가 없는 조직의 인덱스 — 모든 날짜가 평일이라 예측은 캘린더 도입 전과 정확히 같아진다. */

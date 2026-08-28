@@ -64,4 +64,34 @@ interface CalendarEventRepository : JpaRepository<CalendarEvent, UUID> {
         @Param("to") to: Instant,
         pageable: Pageable,
     ): List<CalendarEvent>
+
+    /**
+     * 식수예측용 **사내 행사 후보** 조회([from, to)) — all-day 이면서 (피드 유형 EVENT 이거나 category 가
+     * EVENT) 인 이벤트. 휴일 조회와 **상호배타**로 두지 않는다(하루가 둘 다일 수 있고, 우선순위는
+     * [com.taspa.server.forecast.DayClass] 판정이 정한다).
+     *
+     * ★휴일과 같은 원칙: **요약 텍스트로 행사 여부를 추측하지 않는다.** "워크샵"·"MT" 같은 단어를 찾기
+     * 시작하면 조직·언어마다 다르게 새고, 무엇보다 그 왜곡이 응답에 드러나지 않는다. 조직관리자가 피드를
+     * EVENT 로 등록했거나 VEVENT 에 `CATEGORIES:EVENT` 를 넣은 **명시 선언**만 신호로 쓴다.
+     *
+     * all-day 조건이 핵심 필터다 — 시각이 붙은 회의·교육은 그 날의 식수 성격을 바꾸지 않는다.
+     */
+    @Query(
+        """
+        SELECT e FROM CalendarEvent e
+        WHERE e.orgId = :orgId
+          AND e.allDay = true
+          AND e.startsAt >= :from AND e.startsAt < :to
+          AND (
+            UPPER(e.category) = 'EVENT'
+            OR e.feedId IN (SELECT f.id FROM CalendarFeed f WHERE f.orgId = :orgId AND f.type = 'EVENT')
+          )
+        """,
+    )
+    fun findEventWindow(
+        @Param("orgId") orgId: UUID,
+        @Param("from") from: Instant,
+        @Param("to") to: Instant,
+        pageable: Pageable,
+    ): List<CalendarEvent>
 }

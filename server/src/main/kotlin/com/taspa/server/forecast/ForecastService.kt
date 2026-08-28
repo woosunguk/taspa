@@ -5,6 +5,7 @@ import com.taspa.server.common.exception.ErrorCode
 import com.taspa.server.domain.consumption.ConsumptionEventRepository
 import com.taspa.server.domain.consumption.MealWindow
 import com.taspa.server.domain.org.EmploymentStatus
+import com.taspa.server.domain.org.MemberAbsenceRepository
 import com.taspa.server.domain.org.MembershipChangeType
 import com.taspa.server.domain.org.MembershipHistoryRepository
 import com.taspa.server.domain.org.MembershipStatus
@@ -16,10 +17,10 @@ import com.taspa.server.domain.org.SiteRepository
 import com.taspa.server.forecast.dto.BacktestCell
 import com.taspa.server.forecast.dto.BacktestResponse
 import com.taspa.server.forecast.dto.BacktestSummary
-import com.taspa.server.forecast.dto.ForecastBasis
 import com.taspa.server.forecast.dto.ForecastCell
 import com.taspa.server.forecast.dto.ForecastMethod
 import com.taspa.server.forecast.dto.ForecastResponse
+import com.taspa.server.meal.dto.MenuOnDay
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.sql.Date
@@ -29,7 +30,6 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.math.abs
-import kotlin.math.roundToLong
 
 /**
  * 식수예측 P0 베이스라인(설계 문서 §2.1·§9) — **온디맨드 계산, 저장 없음**(스키마 무변경).
@@ -80,6 +80,10 @@ class ForecastService(
     private val historyRepository: MembershipHistoryRepository,
     private val siteRepository: SiteRepository,
     private val holidayCalendar: HolidayCalendar,
+    private val absenceRepository: MemberAbsenceRepository,
+    private val menuService: com.taspa.server.meal.MealMenuService,
+    private val engine: ForecastEngine,
+    private val props: ForecastProperties,
 ) {
     /**
      * D+1~D+7 배치성 예측 조회. from/to 미지정 시 org-로컬 내일부터 7일. 창 최대 [MAX_FORECAST_WINDOW_DAYS]일.
@@ -93,6 +97,7 @@ class ForecastService(
         to: LocalDate?,
         siteId: UUID?,
         mealWindow: String?,
+        signals: ForecastSignals = ForecastSignals(),
     ): ForecastResponse {
         val org = requireActiveOrg(orgId)
         val zone = zoneOf(org)
@@ -109,27 +114,70 @@ class ForecastService(
             loadActuals(
                 orgId,
                 zone,
-                fromDate.minusDays(LOOKBACK_DAYS),
+                fromDate.minusDays(historyDays()),
                 minOf(toDate, LocalDate.now(zone).minusDays(1)),
             )
         val siteAxes: List<UUID?> = if (siteId != null) listOf(siteId) else listOf(null) + actuals.sites()
         val headcounts = HeadcountLookup(orgId, zone)
-        headcounts.preload(fromDate.minusDays(7), toDate.minusDays(7)) // asOf(date-7) 수요 구간 일괄 계산
+        // 방법 선택은 채점판 각 시점의 모수(그 전일 복원값)까지 필요하다 — 이력 1회 로드 스위프라
+        // 구간을 넓혀도 질의 수는 그대로다(날짜별 asOf 호출이면 날짜당 정렬 스캔이 된다).
+        headcounts.preload(fromDate.minusDays(historyDays() + 1), toDate.minusDays(1))
         // 휴일은 타깃 구간뿐 아니라 basis 후보 구간(타깃-28일까지)도 알아야 한다 — 실적과 달리 완결일
         // 경계를 적용하지 않는다(캘린더는 미래를 향한 선행 정보이고, 그것이 이 신호의 존재 이유다).
-        val holidays = holidayCalendar.load(orgId, fromDate.minusDays(LOOKBACK_DAYS), toDate)
+        // 신호 스위치: 끈 신호는 **빈 인덱스**로 대체한다(분기를 예측 코어에 넣지 않는다 — 코어가 신호
+        // 종류마다 if 를 갖게 되면 조합마다 경로가 갈려 어느 조합이 검증됐는지 알 수 없다).
+        val holidays =
+            if (signals.holidayAware) {
+                holidayCalendar.load(orgId, fromDate.minusDays(historyDays()), toDate, signals.eventAware)
+            } else {
+                HolidayIndex.EMPTY
+            }
+        val absences =
+            if (signals.absenceAware) {
+                loadAbsences(orgId, fromDate.minusDays(historyDays()), toDate)
+            } else {
+                emptyMap()
+            }
+        val occupancy = Occupancy(headcounts::asOf, absences, signals.headcountAdjust)
+        // 식단(메뉴)과 과거 선택 비율 — 구간 전체를 **각각 1회** 질의한다(셀마다 물으면 31일 × 3끼니 ×
+        // 사업장 수만큼 왕복이 생긴다). 비율은 실측이 있을 때만 채워지고 없으면 null 로 남는다.
+        val menuMix = MenuMix.load(orgId, zone, fromDate, toDate, eventRepository, props)
 
         val cells = ArrayList<ForecastCell>()
         var date = fromDate
         while (!date.isAfter(toDate)) {
             // 예측 시점의 재실 모수 = 현재(멤버십 테이블), 전주 시점 = 이력 복원(타깃-7일의 그 날 끝 기준).
-            val hcNow = headcounts.current()
-            val hcLastWeek = headcounts.asOf(date.minusDays(7))
+            // 타깃의 재실 모수 = 현재 재직 인원 − **그 날짜의 부재**. 연차는 미리 신청하므로 미래 날짜에
+            // 대해서도 알 수 있는 정보다 — 이 신호가 없으면 "내일 10명 연차"가 예측에 전혀 반영되지 않는다.
+            val hcNow = occupancy.reference(headcounts.current(), date)
             for (axis in siteAxes) {
                 for (window in windows) {
-                    val p = predictCell(actuals, holidays, date, axis, window, hcNow, hcLastWeek)
+                    val p =
+                        engine.predict(
+                            actuals,
+                            occupancy,
+                            holidays,
+                            date,
+                            axis,
+                            window,
+                            hcNow,
+                            signals.methodSelection,
+                        )
                     cells.add(
-                        ForecastCell(date, axis, window, p.predicted, p.method, p.basis, p.holiday, p.holidayName),
+                        ForecastCell(
+                            date = date,
+                            siteId = axis,
+                            mealWindow = window,
+                            predicted = p.predicted,
+                            p90 = p.p90,
+                            method = p.method,
+                            basis = p.basis,
+                            holiday = p.holiday,
+                            holidayName = p.holidayName,
+                            event = p.event,
+                            eventName = p.eventName,
+                            menus = menusFor(orgId, date, window, axis, p.predicted, menuMix),
+                        ),
                     )
                 }
             }
@@ -156,6 +204,7 @@ class ForecastService(
         to: LocalDate?,
         siteId: UUID?,
         mealWindow: String?,
+        signals: ForecastSignals = ForecastSignals(),
     ): BacktestResponse {
         val org = requireActiveOrg(orgId)
         val zone = zoneOf(org)
@@ -168,10 +217,22 @@ class ForecastService(
         val windows = resolveWindows(mealWindow)
         if (siteId != null) requireOrgSite(orgId, siteId)
 
-        val actuals = loadActuals(orgId, zone, fromDate.minusDays(LOOKBACK_DAYS), toDate)
+        val actuals = loadActuals(orgId, zone, fromDate.minusDays(historyDays()), toDate)
         val headcounts = HeadcountLookup(orgId, zone)
-        headcounts.preload(fromDate.minusDays(7), toDate.minusDays(1)) // asOf 수요 구간(타깃-7 ~ 타깃-1) 일괄 계산
-        val holidays = holidayCalendar.load(orgId, fromDate.minusDays(LOOKBACK_DAYS), toDate)
+        headcounts.preload(fromDate.minusDays(historyDays() + 1), toDate.minusDays(1))
+        val holidays =
+            if (signals.holidayAware) {
+                holidayCalendar.load(orgId, fromDate.minusDays(historyDays()), toDate, signals.eventAware)
+            } else {
+                HolidayIndex.EMPTY
+            }
+        val absences =
+            if (signals.absenceAware) {
+                loadAbsences(orgId, fromDate.minusDays(historyDays()), toDate)
+            } else {
+                emptyMap()
+            }
+        val occupancy = Occupancy(headcounts::asOf, absences, signals.headcountAdjust)
 
         val cells = ArrayList<BacktestCell>()
         var scored = 0
@@ -187,10 +248,20 @@ class ForecastService(
             // 시점(타깃 전일 끝)의 이력 복원값을 쓴다 — 타깃 당일 recorded 스냅샷(당일 입·퇴사)은 실전
             // 예측이 알 수 없는 미래정보라 제외한다. 주의(모수 소스 비대칭, P0 근사): 운영 경로는
             // (멤버십 테이블 현재값 ÷ 이력 복원값) 쌍, 백테스트는 (이력 ÷ 이력) 쌍이다.
-            val hcThen = headcounts.asOf(date.minusDays(1))
-            val hcWeekBefore = headcounts.asOf(date.minusDays(7))
+            // "그 시점" 재현 + 그 날짜의 부재. 연차는 선행 정보라 D-1 에도 알 수 있었다.
+            val hcThen = occupancy.reference(headcounts.asOf(date.minusDays(1)), date)
             for (window in windows) {
-                val p = predictCell(actuals, holidays, date, siteId, window, hcThen, hcWeekBefore)
+                val p =
+                    engine.predict(
+                        actuals,
+                        occupancy,
+                        holidays,
+                        date,
+                        siteId,
+                        window,
+                        hcThen,
+                        signals.methodSelection,
+                    )
                 val actual = actuals.at(date, siteId, window) ?: 0L
                 cells.add(
                     BacktestCell(
@@ -203,6 +274,8 @@ class ForecastService(
                         p.basis,
                         p.holiday,
                         p.holidayName,
+                        p.event,
+                        p.eventName,
                     ),
                 )
                 val predicted = p.predicted ?: continue // NO_DATA 셀은 채점 제외
@@ -239,95 +312,92 @@ class ForecastService(
         )
     }
 
-    // ---- 예측 코어 ----
-
-    private data class Prediction(
-        val predicted: Long?,
-        val method: ForecastMethod,
-        val basis: ForecastBasis,
-        val holiday: Boolean,
-        val holidayName: String?,
-    )
+    // ---- 재실 모수(부재 반영) ----
 
     /**
-     * 셀 1개 예측(폴백 체인). hcNow/hcThen 은 호출부가 결정한 재실 모수 쌍 — 예측은 (현재, 타깃-7일),
-     * 백테스트는 (타깃-1일, 타깃-7일). 둘 다 양수이고 비율이 신뢰 범위([HEADCOUNT_RATIO_MIN]~
-     * [HEADCOUNT_RATIO_MAX]) 안일 때만 비율 보정한다 — 0/null(복원 불가)뿐 아니라 부분 SCD 복원이 만드는
-     * 작은 양수 hcThen(hcThen≪hcNow)의 비율 폭주도 보정 생략(SEASONAL_NAIVE)으로 강등한다(클래스 KDoc 참조).
+     * 재실 인원 = 재직 인원 − **그 날짜의 부재**(연차·반차·출장, 가중 합).
      *
-     * basis 후보(D-7·14·21·28)는 **휴일 여부가 타깃과 일치할 때만** 채택한다(클래스 KDoc "휴일 인지").
-     * 캘린더가 없으면 모든 날이 평일로 판정돼 필터가 아무것도 걸러내지 않으므로, 아래 루프는 캘린더 도입
-     * 전의 "D-7 우선, 없으면 4주 평균"과 정확히 같은 결과를 낸다.
+     * ★부재를 basis 날짜에도 뺀다. 지난주 수요일에 10명이 연차였다면 그 날 실적은 그만큼 낮았는데,
+     *   낮아진 실적을 **전체 인원**으로 나누면 참여율이 과소평가되고 그 값을 이번 주 인원에 곱하면
+     *   예측이 계속 낮게 나온다. 분자(실적)와 분모(모수)가 같은 날의 사실이어야 비율이 성립한다.
+     *
+     * ★0 이하는 null 이다(기존 "복원 불가" 규약과 동일). 전원이 부재인 날은 이론상 0 인분이지만, 그
+     *   0 을 모수로 쓰면 비율이 0 또는 무한이 된다 — 그 날은 비율 보정을 포기하고 전주 실적을 그대로
+     *   쓰는 쪽(SEASONAL_NAIVE)이 안전하다.
      */
-    private fun predictCell(
-        actuals: ActualsIndex,
-        holidays: HolidayIndex,
+    private class Occupancy(
+        private val employedAsOf: (LocalDate) -> Long?,
+        private val absences: Map<LocalDate, Double>,
+        private val adjust: Boolean,
+    ) : HeadcountsAsOf {
+        override fun asOf(date: LocalDate): Long? = reference(employedAsOf(date), date)
+
+        /** [base] 는 호출부가 정한 그 시점 재직 인원(예측=현재값, 백테스트=D-1 복원값). */
+        fun reference(
+            base: Long?,
+            date: LocalDate,
+        ): Long? {
+            if (!adjust || base == null) return null
+            val absent = absences[date] ?: 0.0
+            return Math.round(base - absent).takeIf { it > 0 }
+        }
+    }
+
+    /**
+     * 그 셀(날짜×끼니×사업장)의 식단. 총 예측을 메뉴별로 나누되 **실측 비율이 있을 때만** 나눈다.
+     *
+     * 나머지(비율 없음)는 `share=null`·`predicted=null` 로 남는다 — 화면이 "메뉴는 이것이고 분해 근거는
+     * 아직 없다"를 말할 수 있어야 한다. 반올림 때문에 메뉴별 합이 총 예측과 1~2 다를 수 있으므로 화면은
+     * 총 예측을 별도로 표시한다(합을 억지로 맞추면 특정 메뉴에 잔차가 몰린다).
+     */
+    private fun menusFor(
+        orgId: UUID,
         date: LocalDate,
-        site: UUID?,
-        window: String,
-        hcNow: Long?,
-        hcThen: Long?,
-    ): Prediction {
-        val targetHoliday = holidays.isHoliday(date)
-        val holidayName = holidays.nameOf(date)
-        var lastWeek: Long? = null
-        var excluded = 0
-        val samples = ArrayList<Long>(LOOKBACK_WEEKS)
-        for (weeksBack in 1..LOOKBACK_WEEKS) {
-            val basisDate = date.minusDays(7L * weeksBack)
-            val value = actuals.at(basisDate, site, window) ?: continue
-            if (holidays.isHoliday(basisDate) != targetHoliday) {
-                excluded++
-                continue
-            }
-            if (weeksBack == 1) lastWeek = value
-            samples.add(value)
+        mealWindow: String,
+        siteId: UUID?,
+        predicted: Long?,
+        mix: MenuMix,
+    ): List<MenuOnDay> =
+        menuService.forSlot(orgId, date, mealWindow, siteId).map { menu ->
+            val share = mix.shareOf(mealWindow, menu.name)
+            MenuOnDay(
+                menuId = menu.id!!,
+                name = menu.name,
+                category = menu.categoryEnum(),
+                corner = menu.corner,
+                plannedPortions = menu.plannedPortions,
+                share = share,
+                predicted = if (share != null && predicted != null) Math.round(predicted * share) else null,
+            )
         }
 
-        if (lastWeek != null) {
-            if (hcNow != null && hcThen != null && hcNow > 0 && hcThen > 0) {
-                val ratio = hcNow.toDouble() / hcThen
-                if (ratio in HEADCOUNT_RATIO_MIN..HEADCOUNT_RATIO_MAX) {
-                    return Prediction(
-                        (lastWeek * ratio).roundToLong(),
-                        ForecastMethod.SEASONAL_NAIVE_ADJUSTED,
-                        ForecastBasis(lastWeek, hcNow, hcThen, excluded),
-                        targetHoliday,
-                        holidayName,
-                    )
+    /**
+     * 날짜별 부재 가중 합. 구간을 **한 번에** 읽는다 — 날짜마다 질의하면 백테스트 92일 창에서 왕복이
+     * 92번이 된다(재실 이력 preload 와 같은 이유).
+     */
+    private fun loadAbsences(
+        orgId: UUID,
+        from: LocalDate,
+        to: LocalDate,
+    ): Map<LocalDate, Double> {
+        if (to.isBefore(from)) return emptyMap()
+        val out = HashMap<LocalDate, Double>()
+        absenceRepository.sumWeightByDate(orgId, from, to).forEach { row ->
+            val date =
+                when (val raw = row[0]) {
+                    is java.sql.Date -> raw.toLocalDate()
+                    is LocalDate -> raw
+                    else -> return@forEach
                 }
-            }
-            return Prediction(
-                lastWeek,
-                ForecastMethod.SEASONAL_NAIVE,
-                ForecastBasis(lastWeek, hcNow, hcThen, excluded),
-                targetHoliday,
-                holidayName,
-            )
+            out[date] = (row[1] as Number).toDouble()
         }
-        // 폴백: 최근 4주 같은 요일 평균(채택된 주만 — 전주는 위에서 부재·휴일불일치가 확정이다).
-        if (samples.isNotEmpty()) {
-            return Prediction(
-                samples.average().roundToLong(),
-                ForecastMethod.FOUR_WEEK_AVG,
-                ForecastBasis(null, hcNow, hcThen, excluded),
-                targetHoliday,
-                holidayName,
-            )
-        }
-        return Prediction(
-            null,
-            ForecastMethod.NO_DATA,
-            ForecastBasis(null, hcNow, hcThen, excluded),
-            targetHoliday,
-            holidayName,
-        )
+        return out
     }
 
     // ---- 실적 인덱스 ----
 
     /** (date, site, window) → 수량 합. site=null 조회는 org 전체(모든 site + site 미지정 행의 합)다. */
-    private class ActualsIndex {
+    private class ActualsIndex : ActualsAt {
         private val orgTotal = HashMap<Pair<LocalDate, String>, Long>()
         private val perSite = HashMap<Triple<LocalDate, UUID, String>, Long>()
 
@@ -341,7 +411,7 @@ class ForecastService(
             if (site != null) perSite.merge(Triple(date, site, window), quantity, Long::plus)
         }
 
-        fun at(
+        override fun at(
             date: LocalDate,
             site: UUID?,
             window: String,
@@ -447,6 +517,13 @@ class ForecastService(
 
         private fun endOf(date: LocalDate): Instant = date.plusDays(1).atStartOfDay(zone).toInstant()
     }
+
+    /**
+     * 실적·휴일·모수를 얼마나 과거까지 읽을지. 방법 선택은 채점판(holdout) 각 시점에서 후보를 재예측하므로
+     * `profileWeeks + holdoutWeeks` 만큼 필요하다. 기존 체인의 창보다 짧아지지 않게 하한을 둔다 —
+     * 설정을 잘못 줄이면 도입 전보다 예측을 못 내는 셀이 늘어나기 때문이다.
+     */
+    private fun historyDays(): Long = maxOf(LOOKBACK_DAYS, 7L * (props.profileWeeks + props.holdoutWeeks))
 
     // ---- 검증·헬퍼 ----
 

@@ -55,10 +55,26 @@ class ForecastController(
         @RequestParam(required = false) to: String?,
         @RequestParam(required = false) siteId: UUID?,
         @RequestParam(required = false) mealWindow: String?,
+        /*
+         * 신호 스위치 — **요청 단위 실험**이다(저장하지 않는다). 미전송은 배포 설정 유지.
+         * 목적은 백테스트 숫자를 보며 우리 조직에 맞는 조합을 찾는 것이고, 결론은 배포 설정으로 옮긴다.
+         */
+        @RequestParam(required = false) headcountAdjust: Boolean?,
+        @RequestParam(required = false) absenceAware: Boolean?,
+        @RequestParam(required = false) holidayAware: Boolean?,
+        @RequestParam(required = false) eventAware: Boolean?,
+        @RequestParam(required = false) methodSelection: Boolean?,
     ): ResponseEntity<ForecastResponse> {
         authorizeWithShadow(authentication, orgId, IamActions.FORECAST_READ, "ForecastController.forecast")
         return ResponseEntity.ok(
-            forecastService.forecast(orgId, parseDate(from, "from"), parseDate(to, "to"), siteId, mealWindow),
+            forecastService.forecast(
+                orgId,
+                parseDate(from, "from"),
+                parseDate(to, "to"),
+                siteId,
+                mealWindow,
+                ForecastSignals.of(headcountAdjust, absenceAware, holidayAware, eventAware, methodSelection),
+            ),
         )
     }
 
@@ -70,10 +86,26 @@ class ForecastController(
         @RequestParam(required = false) to: String?,
         @RequestParam(required = false) siteId: UUID?,
         @RequestParam(required = false) mealWindow: String?,
+        /*
+         * 신호 스위치 — **요청 단위 실험**이다(저장하지 않는다). 미전송은 배포 설정 유지.
+         * 목적은 백테스트 숫자를 보며 우리 조직에 맞는 조합을 찾는 것이고, 결론은 배포 설정으로 옮긴다.
+         */
+        @RequestParam(required = false) headcountAdjust: Boolean?,
+        @RequestParam(required = false) absenceAware: Boolean?,
+        @RequestParam(required = false) holidayAware: Boolean?,
+        @RequestParam(required = false) eventAware: Boolean?,
+        @RequestParam(required = false) methodSelection: Boolean?,
     ): ResponseEntity<BacktestResponse> {
         authorizeWithShadow(authentication, orgId, IamActions.FORECAST_BACKTEST, "ForecastController.backtest")
         return ResponseEntity.ok(
-            forecastService.backtest(orgId, parseDate(from, "from"), parseDate(to, "to"), siteId, mealWindow),
+            forecastService.backtest(
+                orgId,
+                parseDate(from, "from"),
+                parseDate(to, "to"),
+                siteId,
+                mealWindow,
+                ForecastSignals.of(headcountAdjust, absenceAware, holidayAware, eventAware, methodSelection),
+            ),
         )
     }
 
