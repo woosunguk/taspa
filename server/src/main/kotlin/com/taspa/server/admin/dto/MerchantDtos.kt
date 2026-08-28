@@ -18,6 +18,17 @@ data class MerchantUpsertRequest(
     val status: String? = null,
     val siteId: UUID? = null,
     val timezone: String? = null,
+    /**
+     * 정액 단가(원). POS 가 이 값으로 **금액 입력 없이 즉시 승인**한다. 없으면 계산원이 직접 입력한다.
+     *
+     * ★timezone 과 같은 이유로 **미전송(null) = 기존 유지**다. full-replace 로 두면 이 필드를 모르는
+     *   기존 클라이언트의 수정 요청이 매장 단가를 조용히 지워, 다음 결제부터 계산원이 금액을 손으로
+     *   넣게 된다(화면 어디에도 이유가 없다). 해제는 [clearDefaultPrice] 로 **명시**한다 — 0 은 CHECK 가
+     *   막으므로 "0 으로 지우기" 같은 우회 경로는 없다.
+     */
+    val defaultPriceMinor: Long? = null,
+    /** true 면 정액 단가를 해제한다(금액 직접 입력으로 되돌림). `defaultPriceMinor` 보다 우선한다. */
+    val clearDefaultPrice: Boolean = false,
 )
 
 data class MerchantView(
@@ -27,6 +38,8 @@ data class MerchantView(
     val status: String,
     val siteId: UUID?,
     val timezone: String,
+    /** 정액 단가(원). null 이면 POS 가 금액을 직접 입력받는다. */
+    val defaultPriceMinor: Long?,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
@@ -39,6 +52,7 @@ data class MerchantView(
                 status = merchant.status,
                 siteId = merchant.siteId,
                 timezone = merchant.timezone,
+                defaultPriceMinor = merchant.defaultPriceMinor,
                 createdAt = merchant.createdAt,
                 updatedAt = merchant.updatedAt,
             )

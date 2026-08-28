@@ -398,6 +398,56 @@ class AdminMerchantConsoleIntegrationTest : IntegrationTestBase() {
     }
 
     @Test
+    fun `정액 단가는 미전송이면 유지되고 명시 플래그로만 해제된다`() {
+        val session = login(adminEmail)
+        val id = createMerchant(session, """{"name":"정액 가맹","timezone":"Asia/Seoul","defaultPriceMinor":12000}""")
+        assertThat(merchantRepository.findById(id).orElseThrow().defaultPriceMinor).isEqualTo(12000L)
+
+        /*
+         * ★timezone 과 같은 규약(미전송 = 유지). full-replace 로 두면 이 필드를 모르는 기존 클라이언트의
+         * 수정 요청이 단가를 조용히 지우고, 그 다음 결제부터 계산원이 금액을 손으로 넣게 된다 —
+         * 화면 어디에도 이유가 없다.
+         */
+        session
+            .perform(
+                put("/api/admin/merchants/{id}", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"name":"정액 가맹 2호"}""")
+                    .with(csrf()),
+            ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.defaultPriceMinor").value(12000))
+
+        // 해제는 명시 플래그로만. 0 은 DB CHECK 가 막으므로 "0 으로 지우기" 우회 경로가 없다.
+        session
+            .perform(
+                put("/api/admin/merchants/{id}", id)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"name":"정액 가맹 2호","clearDefaultPrice":true}""")
+                    .with(csrf()),
+            ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.defaultPriceMinor").doesNotExist())
+
+        assertThat(merchantRepository.findById(id).orElseThrow().defaultPriceMinor).isNull()
+    }
+
+    @Test
+    fun `정액 단가는 0 이하와 상한 초과를 거절한다`() {
+        val session = login(adminEmail)
+
+        // 자릿수 오타 한 번이 그 매장의 전 결제를 잘못된 금액으로 자동 승인한다 — 금액 입력 화면이
+        // 없으니 계산원이 알아챌 기회조차 없다. 그래서 화면·API·DB 세 겹으로 막는다.
+        for (bad in listOf("0", "-1", "1000001")) {
+            session
+                .perform(
+                    post("/api/admin/merchants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"name":"오타 가맹","defaultPriceMinor":$bad}""")
+                        .with(csrf()),
+                ).andExpect(status().isBadRequest)
+        }
+    }
+
+    @Test
     fun `타임존 미전송 수정은 기존 값을 유지한다`() {
         val session = login(adminEmail)
         val id = createMerchant(session, """{"name":"서울 가맹","timezone":"Asia/Seoul"}""")

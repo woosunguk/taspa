@@ -65,6 +65,7 @@ class LegacyPolicyBridge {
                             IamActions.MERCHANT_READ_TRANSACTIONS,
                             IamActions.MERCHANT_READ_FORECAST,
                             IamActions.MERCHANT_READ_SETTLEMENT,
+                            IamActions.MERCHANT_UPDATE_FORECAST_SETTINGS,
                         ),
                     resources = listOf(Trn.merchant(merchantId)),
                 ),

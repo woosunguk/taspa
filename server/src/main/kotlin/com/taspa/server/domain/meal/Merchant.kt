@@ -36,6 +36,16 @@ class Merchant(
      */
     @Column(name = "timezone", nullable = false, length = 64)
     var timezone: String = "UTC",
+    /**
+     * 정액 단가(원). **null 이면 "설정 안 함"** 이고 POS 는 지금까지처럼 금액을 직접 입력받는다 —
+     * 0 과 구분되어야 한다(0 원 자동 승인은 사고다). V38 의 CHECK 가 0 이하를 막는다.
+     *
+     * 가격은 **식당이 정한다**. 조직의 1식 한도(meal_policies)는 "회사가 얼마까지 지원하는가"이고
+     * 가격이 아니다 — 그 값을 가격으로 쓰면 직원 부담이 항상 0 이 되고, 회사가 한도를 올리는 순간
+     * 식당 매출이 따라 오른다.
+     */
+    @Column(name = "default_price_minor")
+    var defaultPriceMinor: Long? = null,
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
     @Column(name = "updated_at", nullable = false)

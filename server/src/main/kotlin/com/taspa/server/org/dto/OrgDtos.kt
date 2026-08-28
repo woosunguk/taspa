@@ -113,6 +113,12 @@ data class MembershipView(
     val orgId: UUID,
     val userId: UUID,
     val email: String?,
+    /**
+     * 표시 이름(users.display_name). 이메일만으로는 구성원 화면에서 **누가 누군지 알 수 없다** —
+     * 조직관리자가 역할·부서를 정하는 화면인데 사람을 식별할 정보가 로컬파트뿐이었다.
+     * 미설정 계정이 있으므로 nullable 이고, 화면은 이름이 없으면 이메일로 내려간다.
+     */
+    val displayName: String?,
     val role: String,
     val department: String?,
     /** 구조적 부서 배정(departments.id) — 자유 텍스트 department 라벨과 별개. 미배정이면 null. */
@@ -136,11 +142,13 @@ data class MembershipView(
         fun from(
             m: OrgMembership,
             email: String?,
+            displayName: String? = null,
         ) = MembershipView(
             id = m.id!!,
             orgId = m.orgId,
             userId = m.userId,
             email = email,
+            displayName = displayName,
             role = m.role,
             department = m.department,
             departmentId = m.departmentId,

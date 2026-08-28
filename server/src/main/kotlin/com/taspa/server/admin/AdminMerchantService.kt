@@ -56,6 +56,22 @@ class AdminMerchantService(
     fun get(id: UUID): MerchantView =
         MerchantView.from(merchantRepository.findById(id).orElse(null) ?: throw AuthException(ErrorCode.NOT_FOUND))
 
+    /**
+     * 정액 단가 검증 — 0 이하와 배포 상한 초과를 막는다. 상한을 두는 이유는 식대 정책과 같다:
+     * 자릿수 오타 한 번이 그 매장의 모든 결제를 잘못된 금액으로 자동 승인한다(금액 입력 화면이 없으니
+     * 계산원이 알아챌 기회도 없다).
+     */
+    private fun validatedPrice(value: Long?): Long? {
+        if (value == null) return null
+        if (value <= 0 || value > MAX_DEFAULT_PRICE_MINOR) {
+            throw AuthException(
+                ErrorCode.VALIDATION_ERROR,
+                "defaultPriceMinor 는 1 이상 ${MAX_DEFAULT_PRICE_MINOR} 이하여야 합니다",
+            )
+        }
+        return value
+    }
+
     fun create(
         request: MerchantUpsertRequest,
         actorId: UUID,
@@ -74,6 +90,7 @@ class AdminMerchantService(
                     // 미지정이면 UTC(컬럼 기본과 동일). 검증은 org/site 와 같은 헬퍼로 수렴한다 —
                     // 잘못된 존이 저장되면 집계 쿼리(AT TIME ZONE)가 런타임에 깨진다.
                     timezone = organizationService.requireValidTimezone(request.timezone) ?: "UTC",
+                    defaultPriceMinor = validatedPrice(request.defaultPriceMinor),
                 ),
             )
         auditEventService.record(
@@ -101,6 +118,12 @@ class AdminMerchantService(
         merchant.siteId = validatedSiteId(request.siteId)
         // ★timezone 만 full-replace 하지 않는다(미전송 = 유지) — DTO 주석의 소급 이동 사고 방지.
         organizationService.requireValidTimezone(request.timezone)?.let { merchant.timezone = it }
+        // 정액 단가도 같은 규약(미전송 = 유지). 해제는 명시 플래그로만 — 조용한 삭제를 만들지 않는다.
+        if (request.clearDefaultPrice) {
+            merchant.defaultPriceMinor = null
+        } else {
+            validatedPrice(request.defaultPriceMinor)?.let { merchant.defaultPriceMinor = it }
+        }
         val saved = merchantRepository.save(merchant)
         auditEventService.record(
             "ADMIN_MERCHANT_UPDATED",
@@ -298,5 +321,8 @@ class AdminMerchantService(
     private companion object {
         /** merchants.name 컬럼 상한(VARCHAR(200), V25). */
         const val MAX_NAME_LENGTH = 200
+
+        /** 정액 단가 상한(원). 자릿수 오타가 그 매장의 전 결제를 잘못된 금액으로 자동 승인하는 것을 막는다. */
+        const val MAX_DEFAULT_PRICE_MINOR = 1_000_000L
     }
 }

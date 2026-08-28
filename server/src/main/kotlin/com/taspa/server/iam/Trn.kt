@@ -132,6 +132,9 @@ object Trn {
 
     fun mealPolicyOverrides(org: UUID): String = build(SERVICE_MEAL, org, "policy", "override/*")
 
+    /** 식단(메뉴). 4번째 세그먼트 규약(orgSegmentOf)을 지킨다. */
+    fun mealMenus(org: UUID): String = build(SERVICE_MEAL, org, "menu", "*")
+
     /** 가맹점은 org 가 아니라 merchant_id 앵커 — org 세그먼트를 비운다(전역). */
     fun merchant(merchantId: UUID): String = build(SERVICE_MEAL, null as String?, "merchant", merchantId.toString())
 
@@ -140,6 +143,11 @@ object Trn {
     fun forecast(org: UUID): String = build(SERVICE_FORECAST, org, "forecast")
 
     fun calendarEvents(org: UUID): String = build(SERVICE_CALENDAR, org, "events")
+
+    fun calendarFeeds(org: UUID): String = build(SERVICE_CALENDAR, org, "feed", "*")
+
+    /** 구성원 부재 기록. 4번째 세그먼트 규약(orgSegmentOf)을 지킨다. */
+    fun orgAbsences(org: UUID): String = build(SERVICE_ORG, org, "absence", "*")
 
     fun scimDirectory(org: UUID): String = build(SERVICE_SCIM, org, "directory")
 

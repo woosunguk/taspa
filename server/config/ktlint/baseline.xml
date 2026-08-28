@@ -13,15 +13,15 @@
         <error line="1" column="1" source="standard:filename" />
     </file>
     <file name="src/main/kotlin/com/taspa/server/iam/IamActions.kt">
-        <error line="231" column="5" source="standard:no-consecutive-comments" />
-        <error line="232" column="5" source="standard:no-consecutive-comments" />
-        <error line="312" column="5" source="standard:no-consecutive-comments" />
+        <error line="260" column="5" source="standard:no-consecutive-comments" />
+        <error line="261" column="5" source="standard:no-consecutive-comments" />
+        <error line="341" column="5" source="standard:no-consecutive-comments" />
     </file>
     <file name="src/main/kotlin/com/taspa/server/iam/IamAuthorizationService.kt">
         <error line="20" column="1" source="standard:no-consecutive-comments" />
     </file>
     <file name="src/main/kotlin/com/taspa/server/org/OrganizationService.kt">
-        <error line="457" column="5" source="standard:no-consecutive-comments" />
+        <error line="461" column="5" source="standard:no-consecutive-comments" />
     </file>
     <file name="src/test/kotlin/com/taspa/server/admin/AdminUnfinalizedInvoicesIntegrationTest.kt">
         <error line="47" column="1" source="standard:no-consecutive-comments" />

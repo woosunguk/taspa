@@ -97,6 +97,13 @@ object IamActions {
      * "부서장은 자기 부서 재정의만 본다" 같은 위임을 붙일 때 조회 권한을 따로 줄 수 있어야 한다.
      */
     const val MEAL_READ_POLICY_OVERRIDES = "meal:ReadPolicyOverrides"
+
+    /**
+     * 식단(메뉴) 관리. 정책(금액)과 **다른 action** 이다 — 메뉴를 짜는 사람과 예산을 정하는 사람이
+     * 같아야 할 이유가 없다(영양사에게 `meal:ManageMenu` 만 주는 것이 자연스럽다).
+     */
+    const val MEAL_READ_MENU = "meal:ReadMenu"
+    const val MEAL_MANAGE_MENU = "meal:ManageMenu"
     const val MEAL_MANAGE_POLICY_OVERRIDES = "meal:ManagePolicyOverrides"
 
     // merchant 콘솔(가맹 관리자 — 사람 신원. 결제 승인 meal:Redeem 은 여전히 기계 전용이다)
@@ -110,6 +117,12 @@ object IamActions {
      */
     const val MERCHANT_READ_SETTLEMENT = "merchant:ReadSettlement"
 
+    /**
+     * 예측 신호 설정 저장. 조회(`ReadForecast`)와 나눈다 — 설정은 이 매장 예측을 보는 **모든 화면**의
+     * 숫자를 바꾸는 능력이라 조회보다 크다(정산·로그를 나눠 둔 것과 같은 이유).
+     */
+    const val MERCHANT_UPDATE_FORECAST_SETTINGS = "merchant:UpdateForecastSettings"
+
     // consumption(적재 = M2M write, 집계 = 멤버/M2M read)
     const val CONSUMPTION_WRITE = "consumption:Write"
     const val CONSUMPTION_READ_AGGREGATE = "consumption:ReadAggregate"
@@ -120,6 +133,22 @@ object IamActions {
 
     // calendar(멤버/M2M read)
     const val CALENDAR_READ_EVENTS = "calendar:ReadEvents"
+
+    /**
+     * 조직 캘린더 **피드 관리**(사내 행사·휴일 선언). 조회와 관리를 나눠 두는 이유는 다른 표면과 같다 —
+     * 나중에 "행사 일정은 보되 피드는 못 건드리는" 역할을 두려면 지금 갈라 놔야 한다.
+     *
+     * 이벤트 조회는 [CALENDAR_READ_EVENTS] 를 재사용한다(같은 자원의 같은 읽기다).
+     */
+    const val CALENDAR_LIST_FEEDS = "calendar:ListFeeds"
+    const val CALENDAR_MANAGE_FEEDS = "calendar:ManageFeeds"
+
+    /**
+     * 구성원 부재(연차·반차·출장·병가) 관리 — 예측의 **재실 인원 모수**를 낮추는 신호다.
+     * 인사 정보를 다루므로 조회조차 조직관리자·위임 역할에 한정된다.
+     */
+    const val ORG_LIST_ABSENCES = "org:ListAbsences"
+    const val ORG_MANAGE_ABSENCES = "org:ManageAbsences"
 
     // scim(M2M org.scim 전용)
     const val SCIM_MANAGE_DIRECTORY = "scim:ManageDirectory"
@@ -398,6 +427,8 @@ object IamActions {
             MEAL_READ_POLICY_HISTORY,
             MEAL_READ_POLICY_OVERRIDES,
             MEAL_MANAGE_POLICY_OVERRIDES,
+            MEAL_READ_MENU,
+            MEAL_MANAGE_MENU,
             // 정산·예측
             BILLING_GENERATE_INVOICE,
             BILLING_READ_INVOICE,
@@ -406,6 +437,13 @@ object IamActions {
             BILLING_RECONCILE,
             FORECAST_READ,
             FORECAST_BACKTEST,
+            // 캘린더(사내 행사·휴일 — iCalendar 피드)
+            CALENDAR_READ_EVENTS,
+            CALENDAR_LIST_FEEDS,
+            CALENDAR_MANAGE_FEEDS,
+            // 부재(연차·반차·출장·병가)
+            ORG_LIST_ABSENCES,
+            ORG_MANAGE_ABSENCES,
         )
 
     /**

@@ -124,11 +124,15 @@ class OrganizationService(
             membershipRepository
                 .findByOrgId(orgId)
                 .let { all -> if (departmentIds == null) all else all.filter { it.departmentId in departmentIds } }
-        val emails =
+        // 이메일만 뽑던 것을 사용자 행 전체로 바꾼다 — 표시 이름이 같은 행에 있어 질의는 그대로 1회다.
+        val users =
             userRepository
                 .findAllById(memberships.map { it.userId })
-                .associate { it.id to it.email }
-        return memberships.map { MembershipView.from(it, emails[it.userId]) }
+                .associateBy { it.id }
+        return memberships.map { m ->
+            val user = users[m.userId]
+            MembershipView.from(m, user?.email, user?.displayName)
+        }
     }
 
     /**
@@ -238,7 +242,7 @@ class OrganizationService(
             isNew -> membershipHistoryService.record(saved, MembershipChangeType.JOINED, actorId)
             roleChanged -> membershipHistoryService.record(saved, MembershipChangeType.ROLE_CHANGED, actorId)
         }
-        return MembershipView.from(saved, user.email)
+        return MembershipView.from(saved, user.email, user.displayName)
     }
 
     @Transactional
@@ -259,8 +263,8 @@ class OrganizationService(
         membership.role = newRole.name
         val saved = membershipRepository.save(membership)
         membershipHistoryService.record(saved, MembershipChangeType.ROLE_CHANGED, actorId)
-        val email = userRepository.findById(userId).orElse(null)?.email
-        return MembershipView.from(saved, email)
+        val user = userRepository.findById(userId).orElse(null)
+        return MembershipView.from(saved, user?.email, user?.displayName)
     }
 
     /**
@@ -290,8 +294,8 @@ class OrganizationService(
         membership.siteId = siteId
         val saved = membershipRepository.save(membership)
         membershipHistoryService.record(saved, MembershipChangeType.ASSIGNED, actorId)
-        val email = userRepository.findById(userId).orElse(null)?.email
-        return MembershipView.from(saved, email)
+        val user = userRepository.findById(userId).orElse(null)
+        return MembershipView.from(saved, user?.email, user?.displayName)
     }
 
     /**
@@ -335,8 +339,8 @@ class OrganizationService(
 
         val saved = membershipRepository.save(membership)
         membershipHistoryService.record(saved, MembershipChangeType.ATTRIBUTES_UPDATED, actorId)
-        val email = userRepository.findById(userId).orElse(null)?.email
-        return MembershipView.from(saved, email)
+        val user = userRepository.findById(userId).orElse(null)
+        return MembershipView.from(saved, user?.email, user?.displayName)
     }
 
     /**
