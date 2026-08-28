@@ -38,3 +38,9 @@ e2e/ui-audit*/
 e2e/audit-merchant/
 e2e/journey*/
 e2e/*.png
+e2e/probe-out/
+e2e/shots/
+e2e/ui-review/
+e2e/zz-shots/
+# 제출물 산출물(영상·PDF·ZIP — 소스에서 재생성 가능)
+submission/
