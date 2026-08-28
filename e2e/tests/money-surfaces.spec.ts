@@ -283,7 +283,8 @@ test.describe('돈 화면 교차 일관성', () => {
     // ── 7. 화면 ②: 가맹 거래 로그 ──────────────────────────────────────────
     await page.goto(`${WEB_BASE}/merchant/${merchantId}/transactions`);
     await expect(page.getByText('정합성 e2e 식당').first()).toBeVisible();
-    await mainTextAfterLoad(page, '식수 로그');
+    // 화면 이름이 '식수 로그' → '밀로그' 로 바뀌었다(마커는 화면의 실제 제목을 따라간다).
+    await mainTextAfterLoad(page, '밀로그');
     // ★요약 **카드**를 본다. 전액 환불(8,000)이 카드에서 빠지면 카드는 "환불 3,000원"인데
     //   바로 아래 표에는 8,000원 환불 행이 보여 한 화면이 두 가지를 주장하게 된다.
     expect(await statValue(page, '환불'), '환불 합계 = 부분 3,000 + 전액 8,000').toBe(expectedRefunded);

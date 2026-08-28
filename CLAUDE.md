@@ -388,7 +388,76 @@ auth-playground의 코드 컨벤션과 보안 패턴을 계승한다.
 - **식권 QR 폐쇄루프(`meal/`, V25)**: 후불형 — 선불충전 없음, QR=**불투명 핸들**(SecureTokenGenerator, 해시만 저장, TTL 60s, 발급 쿨다운 10s→429, FOR UPDATE 단일사용). redeem 은 `/api/merchant/**` 전용 STATELESS 베어러 체인(@Order(-1)) — scope `meal.redeem` + **CLIENT_MERCHANT_ID_SETTING 클레임 결속**(org-id 패턴 복제, AdminClientService merchantId). 정책 평가(org 타임존): 끼니창(meal_policies TIME)·일 횟수(APPROVED만)·per-meal/월 cap 초과분은 거절이 아니라 **self_paid 분리 승인**(조직부담=amount−self_paid). **한도 판정은 org_memberships 행 FOR UPDATE 로 직렬화**(동시 redeem 우회 차단 — 잠금 순서: 토큰행→멤버십행, QR 발급 쿨다운도 동일 앵커). 거래+소비적재는 단일 트랜잭션: source=`payment`·external_id=`auth_id`·site=merchant.site(**거래 org 소속 site 만** — 교차 테넌트 오귀속 차단). void 는 자기 merchant 만(404)·멱등·같은 external_id VOIDED 재적재(full-replace, 원본 site 보존)로 집계 자동 제외. POS 멱등(merchant,posTxnId) 재전송은 기존 결과 재반환(토큰 검증보다 선확인). 외부 M2M 소비적재는 source=payment 사용 불가(장부 예약). UI: `/meal`(조직선택·QR 렌더 `static/js/qrcode.js` 벤더링(무의존 ISO 18004)·서버 Date 앵커 카운트다운·사용내역), 가맹 관리 `/admin/merchants`.
 - **식수예측 P0(`forecast/`, 스키마 무변경)**: 그레인 (끼니×site×일), 온디맨드 계산. 방법: 전주 동요일 × 재실보정(`countActiveEmployedAsOf` — 이력 DISTINCT ON 복원, **비율 0.5~2.0 밖이면 보정 생략**·SEASONAL_NAIVE 강등), 폴백 SEASONAL_NAIVE_ADJUSTED→SEASONAL_NAIVE→FOUR_WEEK_AVG→**NO_DATA(null≠0)**. 백테스트는 전일 끝(D-1) 이력로 시점 재현(미래정보 누수 금지)·MAPE(0 실측 분모 제외+제외수 노출)/WAPE/bias·이력 preload 1회. 집계 상한 도달 시 fail-loud(VALIDATION_ERROR). 인가: 세션(플랫폼∨ORG_ADMIN) 또는 M2M `meal.forecast.read`+org 결속, 사용자 토큰은 **sub UUID 형태면 무조건 거부**(fail-closed). GET /api/orgs/{org}/forecast·/backtest.
   - **캘린더 휴일 인지(`forecast/HolidayCalendar`)**: 휴일 = `all_day=true` ∧ (피드 `type='HOLIDAY'` ∨ `category='HOLIDAY'`) — **요약 텍스트로 의미를 추측하지 않는다**(조직관리자의 명시 선언만 믿는다). ★all-day 는 instant 가 아니라 **달력 날짜**라 파서가 UTC 로 고정한 벽시계를 **UTC 그대로** 읽는다 — org 타임존으로 변환하면 UTC 서편 존에서 하루 밀린다(소비 실적의 org-타임존 앵커와 **의도적으로 다르다**). DTEND 배타(연휴 N일). 용도 2가지: ①타깃일 휴일이면 셀에 `holiday`/`holidayName` 노출하되 **predicted 를 0 으로 단정하지 않는다**(당직 식사) ②basis 후보(D-7·14·21·28)는 **휴일 여부가 타깃과 같을 때만** 채택(대칭 — 휴일→평일은 과소, 평일→휴일은 과대). 전부 걸리면 NO_DATA(제외 수는 `basis.excludedHolidayBasis`). **캘린더 없는 조직은 인덱스가 비어 도입 전과 동작이 정확히 동일**(회귀 방지의 핵심). 백테스트도 같은 판정을 쓰지만 `calendar_events` 가 sweep-recreate 되어 "그때 알고 있었나"를 재현 못 하므로 **"캘린더가 처음부터 있었다면"의 상한**이다.
-  - **가맹 그레인(`MerchantForecastService`)에는 휴일을 적용하지 않는다(의도적)**: 한 매장이 여러 조직 손님을 받아 "어느 조직의 휴일인가"가 결정 불가고(타임존을 빌릴 수 없는 것과 같은 이유), 고객사 휴일의 영향은 이미 그 매장 실적에 들어 있어 겹치면 이중 보정이다. 미해결: 전 고객사가 쉬는 연휴가 basis 면 과소예측 — 매장 자체 휴무 캘린더가 더 정확한 신호다.
+  - **연차·휴가 신호(`org_member_absences`, V39 · `MemberAbsenceService`)**: 재실 모수를 **하루 단위로**
+    교정한다. 그전까지 모수는 재직 인원(이력 복원)뿐이라, 12명이 연차인 날에도 40명분을 예측했다.
+    반차는 0.50 명(`AbsenceType.defaultWeight`) — **가중치는 유형에서 서버가 파생**하고 요청 필드로 받지
+    않는다(받으면 "출장인데 0.1" 이 들어와 모수가 조용히 왜곡되고 그 왜곡은 예측에만 나타난다).
+    ★질의는 **구간 1회**(`sumWeightByDate`) — 날짜마다 물으면 백테스트 92일 창에서 왕복이 92번이다.
+    ★**재직 중인 사람만 센다**(멤버십 ACTIVE ∧ EMPLOYED). 퇴사자의 부재 행이 남아도 모수를 두 번 깎지
+    않는다 — 그 사람은 이미 재실 집계에서 빠져 있다.
+    ★**iCalendar 로 만들지 않았다**(의도): 부재는 "몇 명이 빠지는가"라는 **수량** 신호인데 VEVENT 의
+    ATTENDEE 는 "그날 없다"와 "초대받았다"를 표준이 구분하지 않아 인원 수의 근거로 쓰면 조용히 틀린다.
+    ★**한계(정직하게)**: 재실 비율은 `SEASONAL_NAIVE_ADJUSTED` 에만 곱한다 — `FOUR_WEEK_AVG` 로 강등된
+    셀은 부재를 반영하지 않는다(basis 가 여러 날이라 단일 비율이 없다). 화면의 방법 열이 그 사실을 드러낸다.
+  - **사내 행사 신호(iCalendar, `DayClass`)**: 하루의 성격을 이진(휴일/평일)에서 **3분류**
+    (`NORMAL`/`HOLIDAY`/`EVENT`)로 넓혔고, basis 대칭 판정 6지점이 전부 클래스 비교로 수렴한다.
+    휴일과 나누는 이유는 **왜곡 방향이 다르다**: 휴일은 당직만 남아 급감, 전사 행사는 사람은 있지만
+    외부 식사로 **부분 감소**다. 하나로 묶으면 행사일에 휴일 실적(거의 0)이 들어와 크게 과소예측한다.
+    겹치는 날은 **휴일이 이긴다**(배식 여부를 정하는 쪽).
+    ★판정은 **`all_day=true` ∧ (피드 `type='EVENT'` ∨ `category='EVENT'`)** — 휴일과 같은 원칙으로
+    **요약 텍스트를 추측하지 않는다**("워크숍"·"MT" 를 찾기 시작하면 조직·언어마다 다르게 새고, 그
+    왜곡이 응답에 드러나지 않는다). 시각이 붙은 회의·교육은 신호가 아니다(`demo-calendar-events.ics` 에
+    대조군으로 한 건 들어 있다).
+    ★**조직관리자가 스스로 등록한다**(`OrgCalendarController`, `/api/orgs/{org}/calendar/feeds`).
+    그전까지 피드 등록은 플랫폼 ADMIN 전용이라 **실제로는 아무 조직도 캘린더를 갖지 않았고**, 휴일 인지
+    코드가 있는데도 데이터가 없어 항상 비활성이었다. 입력은 표준 두 경로뿐 — 구독 URL(SSRF 방어
+    `IcsUrlSecurity`) 또는 `.ics` 업로드. **자체 이벤트 CRUD 를 만들지 않은 이유**: 조직 일정은 이미
+    Workspace·Outlook·그룹웨어에 있고 우리 화면에 다시 입력하게 하면 두 곳이 갈라지는데, 갈라진 순간
+    예측은 틀린 쪽을 믿는다. RRULE·DTEND 배타·종일 의미론은 `IcalendarParser` 가 이미 표준대로 해석한다.
+  - **신호(`ForecastSignals`, 7종)**: `headcountAdjust`·`absenceAware`·`holidayAware`·`eventAware`·
+    `menuAware`·`nowcast`·`methodSelection`. 가맹 그레인은 **매장별 저장**(V41
+    `merchant_forecast_settings`, GET/PUT `/api/merchant-console/{id}/forecast-settings`) — "저장하면
+    누가 언제 켰는지 모른다"는 원래 우려는 감사 이벤트(`MERCHANT_FORECAST_SETTINGS_UPDATED`)가 답한다.
+    쿼리 파라미터는 저장값을 **요청 한 번만** 덮는 실험 경로(`SignalOverrides` — 부분 덮어쓰기라
+    `eventAware=true` 하나만 실험해도 저장해 둔 다른 스위치가 기본값으로 돌아가지 않는다).
+    ★기본값은 서버 기본값과 같아야 한다(`web/lib/forecast-signals.ts`) — 설정 행 없는 매장의 동작이
+    도입 전과 정확히 같아야 한다. UI 는 매장 콘솔 우측 "빠른 설정" 패널(Gmail 문법 — 토글 즉시 저장).
+    ★**가맹 그레인의 조직 신호는 배제가 아니라 분해다**(`MerchantForecastService.OrgContext`): 실적을
+    조직별로 갈라(`aggregateByMerchantOrgDateWindow`, org_id NOT NULL → 분해의 합=총합) 각 조각에 그
+    조직의 캘린더·연차를 적용하고 합산한다 — A 조직 휴일이 B 조직 손님 몫을 깎지 않는다. 셀 method 는
+    조직별 방법이 섞이면 `COMPOSITE`, 일부 조직 근거 없음은 `partial=true`(합은 하한). 이용 조직 목록
+    (`MerchantOrgInfo` — 실적순 정렬 + 14일 내 휴일·행사·부재 요약)이 응답에 실린다.
+    ★부재 비율의 분모는 **현재 재직 인원**(SCD 복원 아님 — basis 최대 4주 전이라 채용·퇴사 변동은 작고
+    지배 신호는 연차다. 그래서 조직 예측의 몫과 약간 다를 수 있다 — 정직한 트레이드오프).
+    ★`menuAware` 는 배제가 아니라 **선호**(같은 카테고리 표본이 있으면 그쪽만, 없으면 전체 — 메뉴 효과는
+    휴일만큼 강하지 않다), 배율을 지어내지 않는다. 매장 연결 사업장의 조직 식단에만 적용(교차 오염 방지),
+    한 끼니에 카테고리가 여럿이면 대표를 정하지 않는다(신호 불가).
+    ★`nowcast` 는 오늘 셀 예측을 **이미 나간 인분으로 하한**(soFar)한다. NO_DATA 셀에는 숫자를 만들지
+    않고 soFar 로만 노출한다 — 부분값을 예측으로 위장하지 않는다. 백테스트는 타깃이 과거라 구조적 미적용.
+  - 회귀: `forecast/ForecastEngineTest`(18 — 행사 대칭 5종 포함: 과거 행사만 basis · 근거 없으면 NO_DATA ·
+    평일 타깃이 행사일을 제외 · 휴일 우선 · **행사 선언이 없으면 도입 전과 동일한 대조군**),
+    `meal/MerchantForecastSignalsIntegrationTest`(6 — 조직 분해의 **교차 오염 차단**(A 행사가 B 몫 불변)·
+    연차 비율 보정·저장 설정 적용·**부분 덮어쓰기**(파라미터 하나가 저장값을 되돌리지 않음)·감사 이벤트·
+    무행사 대조군. ★전 조직이 같은 방법이면 COMPOSITE 가 아니라 그 방법을 그대로 쓴다 — COMPOSITE 는
+    "섞였다"가 정보일 때만),
+    `web/app/merchant/[merchantId]/_sections/shared.test.ts`(4 — 신호 접기: **부재는 끼니 수만큼 부풀리지
+    않는다**(날짜 속성 — 조직당 1회) + 무신호 대조군),
+    e2e `forecast-signals.spec.ts`(빠른 설정 토글 → PUT 저장 → 예측 reload → 표의 행사 배지 →
+    **새로고침 후 지속** — 서버 테스트가 못 보는 "토글과 화면 사이"를 고정한다.
+    ★Base UI Switch 는 id 가 **aria-hidden 체크박스**에 붙는다 — id 로 클릭하면 "outside of the
+    viewport" 로 영영 재시도한다. 라벨(`label[for=...]`)을 클릭할 것).
+  - **셀 근거 상세(`MerchantForecastService.cellDetail`, GET `/api/merchant-console/{id}/forecast/cell`)**:
+    예측 숫자 클릭 → "왜 이 숫자인가" 페이지(`/merchant/{id}/cell/{date}/{window}`). 세 층 — ①메뉴별
+    예상(**어떤 메뉴 몇 인분**) ②조직 분해(+basis 날짜·실적) ③읽는 법.
+    ★셀 값은 목록과 **같은 계산**(compositeCell 재사용) — 상세가 자체 계산을 가지면 두 번째 의견이 된다.
+    ★메뉴 비율(`aggregateMenuMixByMerchant`)은 **이 매장 + 같은 요일**만 학습한다 — 주간 식단은 요일마다
+    메뉴가 달라, 요일을 섞으면 금요일 메뉴가 8주 분모에 눌려 10%로 왜곡된다(실측 후 수정). 분모는
+    **오늘 식단 메뉴들의 기록 합**(합=1이 설명 가능) · 근거 없는 메뉴는 null(균등 분배를 지어내지 않는다).
+    가맹 콘솔 메뉴는 질문 단위 3분할: 식수예측(발주) / 오늘 현황(진행) / 잔반 리포트(성과) —
+    9섹션 한 페이지는 히어로 질문을 스크롤에 묻는다(사용자 지적).
+  - ~~가맹 그레인에는 휴일을 적용하지 않는다~~ → **조직 분해로 해소됐다**(위 신호 항목). "어느 조직의
+    휴일인가 결정 불가" 문제의 답은 배제가 아니라 분해였다 — 실적을 조직별로 갈라 각 조직 신호를 그
+    조각에만 적용한다. 여전히 미해결: 매장 **자체** 휴무 캘린더(조직과 무관한 정기휴무)는 없다.
 - **부분 환불(`MealRedeemService.refund`, V36)**: 전액 취소(void)만 있던 자리에 "식사는 했는데 금액이
   틀렸다"를 넣었다(void 후 재승인은 손님이 QR 을 다시 받아야 하고 — 토큰 단일 사용 — 장부에 거래가 둘로 남는다).
   - ★**분담 재계산이 전부**다. 환불 후 금액으로 조직/개인 분담을 **승인과 같은 식**으로 다시 계산하고
