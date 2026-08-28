@@ -51,6 +51,15 @@ data class MerchantIdentityView(
     val name: String,
     val category: String,
     val timezone: String,
+    /**
+     * 정액 단가(원). null 이면 POS 가 금액을 직접 입력받는다.
+     *
+     * ★이 값은 **금액이 아니라 설정**이다 — 서버는 여전히 redeem 요청의 `amountMinor` 로 승인한다.
+     *   가격 결정을 서버로 옮기지 않는 이유: POS 는 이미 merchant 결속 M2M 신원이라 금액을 정할 권한이
+     *   있고(오늘도 그렇다), 서버가 가격을 강제하면 품목별 가격·행사가를 넣을 자리가 사라진다.
+     *   여기서 내려보내는 것은 "이 매장은 정액이다"라는 사실뿐이다.
+     */
+    val defaultPriceMinor: Long?,
 )
 
 /** [MyMerchantView] 목록 + 열 수 없는 매장의 사유. 화면 진입점이 한 번에 필요한 사실 전부. */
@@ -126,6 +135,24 @@ data class MerchantForecastBasis(
     val sampleWeeks: Int,
 )
 
+/**
+ * 가맹 예측 셀의 **조직 분해** 한 조각. 매장 총합은 조직별 예측의 합이고, 캘린더·연차 신호는
+ * 이 조각 단위로만 적용된다(매장 총합에 A 조직 휴일을 곱하면 B 조직 손님까지 깎인다).
+ */
+data class MerchantOrgSlice(
+    val orgId: UUID,
+    val orgName: String,
+    val predicted: Long?,
+    val method: ForecastMethod,
+    /** 그 조직 캘린더가 이 날을 휴일/행사로 선언했는가 — 총합이 낮은 이유를 화면이 설명하는 근거. */
+    val holiday: Boolean,
+    val holidayName: String?,
+    val event: Boolean,
+    val eventName: String?,
+    /** 그 조직의 이 날짜 부재(연차·반차 가중 합). 신호를 껐으면 0. */
+    val absentWeight: Double,
+)
+
 /** 가맹 예측 셀 — (날짜 × 끼니) 그레인. predicted=null 은 "0 인분"이 아니라 "데이터 없음"(NO_DATA)이다. */
 data class MerchantForecastCell(
     val date: LocalDate,
@@ -133,6 +160,15 @@ data class MerchantForecastCell(
     val predicted: Long?,
     val method: ForecastMethod,
     val basis: MerchantForecastBasis,
+    /**
+     * 조직별 분해. 합 = predicted 가 원칙이나, 일부 조직이 NO_DATA 면 그 조직 몫을 알 수 없어
+     * [partial] 이 true 가 된다 — 그때 predicted 는 **아는 조직의 합**이고 하한으로 읽어야 한다
+     * (모르는 몫을 0 으로 위장하는 것보다 하한임을 드러내는 것이 정직하다).
+     */
+    val orgs: List<MerchantOrgSlice> = emptyList(),
+    val partial: Boolean = false,
+    /** 매장-로컬 **오늘** 셀에서, 지금까지 이미 나간 인분(nowcast). 다른 날짜는 null. */
+    val soFar: Long? = null,
 )
 
 /** 가맹 예측 응답 — 집계 파생값만(개별 이벤트·손님 식별자 없음). 창 절단은 응답에 정직하게 드러난다. */
@@ -146,6 +182,21 @@ data class MerchantForecastResponse(
     val windowTruncated: Boolean,
     val mealWindow: String?,
     val cells: List<MerchantForecastCell>,
+    /** 이 매장을 이용하는 조직(실적 기준). 예측 분해와 같은 판정을 쓴다. */
+    val orgs: List<MerchantOrgInfo> = emptyList(),
+)
+
+/** 이 매장을 이용 중인 조직 한 줄 — 가맹 콘솔 "이용 조직" 섹션. */
+data class MerchantOrgInfo(
+    val orgId: UUID,
+    val name: String,
+    /** 최근 28일 인분 수(이 매장에서). */
+    val recentPortions: Long,
+    /** 앞으로 14일 내 이 조직의 휴일·행사 수(조직 캘린더 선언 기준). */
+    val upcomingHolidays: Int,
+    val upcomingEvents: Int,
+    /** 앞으로 14일 부재 인일(person-day, 가중) 합. */
+    val upcomingAbsentWeight: Double,
 )
 
 /** 가맹 백테스트 셀 — "그 시점에 예측했을 값"(predicted) vs 실적(actual). 실적이 없으면 actual=0. */
@@ -260,4 +311,75 @@ data class PlatformPayablesView(
     val totalRefundedMinor: Long,
     val totalApprovedCount: Long,
     val lines: List<PlatformPayableLine>,
+)
+
+/**
+ * POS 가 배식 코너를 고르기 위해 받는 오늘의 식단.
+ *
+ * **매장이 연결된 사업장의 조직 식단**이다(`merchants.site_id` → `sites.org_id`). 연결이 없으면 빈
+ * 목록이다 — 여러 조직 손님을 받는 매장은 "누구의 식단인가"가 결정 불가라 추측하지 않는다(타임존을
+ * 빌릴 수 없는 것과 같은 이유). 그 경우 POS 는 메뉴 버튼을 띄우지 않고, 그 끼니 메뉴가 하나뿐인
+ * 조직이면 서버가 자동 귀속한다.
+ */
+data class MerchantMenuView(
+    val menuId: java.util.UUID,
+    val name: String,
+    val category: String,
+    val corner: String?,
+)
+
+data class MerchantMenusResponse(
+    val mealWindow: String,
+    val menuDate: java.time.LocalDate,
+    val menus: List<MerchantMenuView>,
+)
+
+/** 셀 상세의 basis 한 점 — "이 날짜의 이 실적을 근거로 썼다". */
+data class MerchantBasisPoint(
+    val date: java.time.LocalDate,
+    val actual: Long,
+)
+
+/** 셀 상세의 조직 조각 — 목록 응답의 조각 + 근거 날짜들. */
+data class MerchantOrgSliceDetail(
+    val slice: MerchantOrgSlice,
+    /** 실제로 채택된 basis(같은 성격의 날만). 비어 있으면 근거 없음(NO_DATA). */
+    val basis: List<MerchantBasisPoint>,
+    /** 그 조직의 현재 재직 인원(부재 비율의 분모). 신호 OFF 면 null. */
+    val headcount: Long?,
+)
+
+/** 셀 상세의 메뉴 한 줄 — "어떤 메뉴가 몇 인분인가"에 대한 답. */
+data class MerchantMenuShare(
+    val name: String,
+    val corner: String?,
+    val category: String,
+    val plannedPortions: Int?,
+    /**
+     * 이 매장 실적(menu_ref)에서 배운 선택 비율. **근거가 없으면 null** — 균등 분배를 지어내지 않는다
+     * (메뉴가 둘이니 반반"을 내려보내면 화면은 그것을 예측으로 표시한다).
+     */
+    val share: Double?,
+    /** 사업장 조직 몫 예측 × 비율. share 또는 조직 예측이 없으면 null. */
+    val predicted: Long?,
+    /** 학습 표본(그 메뉴로 기록된 인분 수 합) — 비율의 신뢰 근거를 화면이 밝힐 수 있게. */
+    val sampleQuantity: Long,
+)
+
+/**
+ * (날짜 × 끼니) 셀 하나의 **근거 전체** — 화면의 숫자를 클릭했을 때 "왜 이 숫자인가"에 답하는 응답.
+ * 셀 자체는 목록 API 와 같은 계산(compositeCell)을 그대로 쓴다 — 상세가 목록과 다른 숫자를 말하면
+ * 상세가 아니라 두 번째 의견이 된다.
+ */
+data class MerchantCellDetail(
+    val date: java.time.LocalDate,
+    val mealWindow: String,
+    val timezone: String,
+    val cell: MerchantForecastCell,
+    val orgs: List<MerchantOrgSliceDetail>,
+    /** 사업장 조직의 그 끼니 식단 + 메뉴별 분해. 식단이 없거나 사업장 미연결이면 빈 목록. */
+    val menus: List<MerchantMenuShare>,
+    /** 메뉴 비율 학습 창(있을 때만) — "언제부터의 실적으로 배운 비율인가". */
+    val menuLearnFrom: java.time.LocalDate?,
+    val menuLearnTo: java.time.LocalDate?,
 )

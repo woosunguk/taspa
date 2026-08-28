@@ -1,11 +1,14 @@
 package com.taspa.server.meal
 
+import com.taspa.server.audit.AuditEventService
 import com.taspa.server.common.exception.AuthException
 import com.taspa.server.common.exception.ErrorCode
 import com.taspa.server.common.export.CsvWriter
 import com.taspa.server.domain.user.User
 import com.taspa.server.domain.user.UserRepository
 import com.taspa.server.domain.user.UserRole
+import com.taspa.server.forecast.ForecastSignals
+import com.taspa.server.forecast.SignalOverrides
 import com.taspa.server.iam.AuthorizationRequest
 import com.taspa.server.iam.IamActions
 import com.taspa.server.iam.IamAuthorizationService
@@ -13,15 +16,19 @@ import com.taspa.server.iam.IamContextFactory
 import com.taspa.server.iam.IamPrincipalKind
 import com.taspa.server.iam.Trn
 import com.taspa.server.meal.dto.MerchantBacktestResponse
+import com.taspa.server.meal.dto.MerchantCellDetail
 import com.taspa.server.meal.dto.MerchantForecastResponse
 import com.taspa.server.meal.dto.MerchantSettlementView
 import com.taspa.server.meal.dto.MerchantTransactionsResponse
 import com.taspa.server.meal.dto.MyMerchantsResponse
+import com.taspa.server.stepup.RequireRecentAuth
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -56,6 +63,7 @@ class MerchantConsoleController(
     private val userRepository: UserRepository,
     private val iamAuthorizationService: IamAuthorizationService,
     private val iamContextFactory: IamContextFactory,
+    private val auditEventService: AuditEventService,
 ) {
     /**
      * 내가 관리하는 가맹점 목록(매장 선택). 인가는 "로그인만" — 결과가 자기 멤버십으로 자연 필터되므로
@@ -188,10 +196,27 @@ class MerchantConsoleController(
         @RequestParam(required = false) from: String?,
         @RequestParam(required = false) to: String?,
         @RequestParam(required = false) mealWindow: String?,
+        /*
+         * 신호 스위치 — 요청 단위 실험(조직 예측과 같은 규약). 각 신호는 **이용 조직별로** 적용된다:
+         * 실적을 조직별로 분해해 그 조직의 캘린더·연차를 그 조각에만 적용하고 합산한다.
+         */
+        @RequestParam(required = false) headcountAdjust: Boolean?,
+        @RequestParam(required = false) absenceAware: Boolean?,
+        @RequestParam(required = false) holidayAware: Boolean?,
+        @RequestParam(required = false) eventAware: Boolean?,
+        @RequestParam(required = false) menuAware: Boolean?,
+        @RequestParam(required = false) nowcast: Boolean?,
+        @RequestParam(required = false) methodSelection: Boolean?,
     ): ResponseEntity<MerchantForecastResponse> {
         authorize(authentication, merchantId, IamActions.MERCHANT_READ_FORECAST, "MerchantConsoleController.forecast")
         return ResponseEntity.ok(
-            merchantForecastService.forecast(merchantId, parseDate(from, "from"), parseDate(to, "to"), mealWindow),
+            merchantForecastService.forecast(
+                merchantId,
+                parseDate(from, "from"),
+                parseDate(to, "to"),
+                mealWindow,
+                SignalOverrides(headcountAdjust, absenceAware, holidayAware, eventAware, menuAware, nowcast, methodSelection),
+            ),
         )
     }
 
@@ -203,11 +228,103 @@ class MerchantConsoleController(
         @RequestParam(required = false) from: String?,
         @RequestParam(required = false) to: String?,
         @RequestParam(required = false) mealWindow: String?,
+        /*
+         * 신호 스위치 — 요청 단위 실험(조직 예측과 같은 규약). 각 신호는 **이용 조직별로** 적용된다:
+         * 실적을 조직별로 분해해 그 조직의 캘린더·연차를 그 조각에만 적용하고 합산한다.
+         */
+        @RequestParam(required = false) headcountAdjust: Boolean?,
+        @RequestParam(required = false) absenceAware: Boolean?,
+        @RequestParam(required = false) holidayAware: Boolean?,
+        @RequestParam(required = false) eventAware: Boolean?,
+        @RequestParam(required = false) menuAware: Boolean?,
+        @RequestParam(required = false) nowcast: Boolean?,
+        @RequestParam(required = false) methodSelection: Boolean?,
     ): ResponseEntity<MerchantBacktestResponse> {
         authorize(authentication, merchantId, IamActions.MERCHANT_READ_FORECAST, "MerchantConsoleController.backtest")
         return ResponseEntity.ok(
-            merchantForecastService.backtest(merchantId, parseDate(from, "from"), parseDate(to, "to"), mealWindow),
+            merchantForecastService.backtest(
+                merchantId,
+                parseDate(from, "from"),
+                parseDate(to, "to"),
+                mealWindow,
+                SignalOverrides(headcountAdjust, absenceAware, holidayAware, eventAware, menuAware, nowcast, methodSelection),
+            ),
         )
+    }
+
+    /**
+     * (날짜 × 끼니) 셀 하나의 근거 상세 — 목록의 숫자를 클릭했을 때 "왜 이 숫자인가"에 답한다.
+     * 조직 분해(basis 날짜·실적 포함)와 메뉴별 분해("어떤 메뉴가 몇 인분")를 싣는다.
+     */
+    @GetMapping("/{merchantId}/forecast/cell")
+    fun forecastCell(
+        authentication: Authentication,
+        @PathVariable merchantId: UUID,
+        @RequestParam date: String,
+        @RequestParam mealWindow: String,
+        @RequestParam(required = false) headcountAdjust: Boolean?,
+        @RequestParam(required = false) absenceAware: Boolean?,
+        @RequestParam(required = false) holidayAware: Boolean?,
+        @RequestParam(required = false) eventAware: Boolean?,
+        @RequestParam(required = false) menuAware: Boolean?,
+        @RequestParam(required = false) nowcast: Boolean?,
+        @RequestParam(required = false) methodSelection: Boolean?,
+    ): ResponseEntity<MerchantCellDetail> {
+        authorize(authentication, merchantId, IamActions.MERCHANT_READ_FORECAST, "MerchantConsoleController.forecastCell")
+        return ResponseEntity.ok(
+            merchantForecastService.cellDetail(
+                merchantId,
+                parseDate(date, "date") ?: throw AuthException(ErrorCode.VALIDATION_ERROR, "date 는 필수입니다"),
+                mealWindow,
+                SignalOverrides(headcountAdjust, absenceAware, holidayAware, eventAware, menuAware, nowcast, methodSelection),
+            ),
+        )
+    }
+
+    /** 저장된 예측 신호 설정. 행이 없으면 코드 기본값(도입 전과 같은 동작)이다. */
+    @GetMapping("/{merchantId}/forecast-settings")
+    fun forecastSettings(
+        authentication: Authentication,
+        @PathVariable merchantId: UUID,
+    ): ResponseEntity<ForecastSignals> {
+        authorize(authentication, merchantId, IamActions.MERCHANT_READ_FORECAST, "MerchantConsoleController.forecastSettings")
+        return ResponseEntity.ok(merchantForecastService.readSettings(merchantId))
+    }
+
+    /**
+     * 예측 신호 설정 저장 — 이 매장 예측을 보는 **모든 화면**의 숫자를 바꾸므로 전용 action
+     * (`merchant:UpdateForecastSettings`) + 감사 이벤트를 남긴다("저장하면 누가 언제 켰는지 모른다"는
+     * 원래 우려에 대한 답이 이 감사 기록이다).
+     */
+    @RequireRecentAuth
+    @PutMapping("/{merchantId}/forecast-settings")
+    fun saveForecastSettings(
+        authentication: Authentication,
+        @PathVariable merchantId: UUID,
+        @RequestBody request: ForecastSignals,
+    ): ResponseEntity<ForecastSignals> {
+        authorize(
+            authentication,
+            merchantId,
+            IamActions.MERCHANT_UPDATE_FORECAST_SETTINGS,
+            "MerchantConsoleController.saveForecastSettings",
+        )
+        val saved = merchantForecastService.saveSettings(merchantId, request)
+        auditEventService.record(
+            "MERCHANT_FORECAST_SETTINGS_UPDATED",
+            currentUser(authentication).id,
+            mapOf(
+                "merchantId" to merchantId.toString(),
+                "headcountAdjust" to saved.headcountAdjust,
+                "absenceAware" to saved.absenceAware,
+                "holidayAware" to saved.holidayAware,
+                "eventAware" to saved.eventAware,
+                "menuAware" to saved.menuAware,
+                "nowcast" to saved.nowcast,
+                "methodSelection" to (saved.methodSelection ?: false),
+            ),
+        )
+        return ResponseEntity.ok(saved)
     }
 
     // ---- 인가 ----
