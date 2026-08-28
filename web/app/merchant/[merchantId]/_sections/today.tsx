@@ -1,9 +1,13 @@
 "use client";
 
+import Link from "next/link";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState, ErrorNotice, RowsSkeleton } from "@/components/feedback";
 import type { Query } from "@/lib/useApi";
 import { cn } from "@/lib/utils";
+import { useMerchant } from "../../_lib/merchant-context";
+import { DonutMeter } from "@/components/charts";
 import { Notice, Portions, Section, Stat, TableScroll } from "../../_components/kit";
 import {
   MEAL_WINDOWS,
@@ -83,7 +87,7 @@ export function TodayForecastSection({
         <>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {MEAL_WINDOWS.map((window, index) => (
-              <WindowCard key={window} window={window} cell={cells[index]} />
+              <WindowCard key={window} window={window} cell={cells[index]} today={today} />
             ))}
           </div>
 
@@ -122,15 +126,30 @@ export function TodayForecastSection({
   );
 }
 
-/** 끼니 하나의 예측 카드 — 이 화면에서 가장 큰 글자가 오는 자리다. */
-function WindowCard({ window, cell }: { window: string; cell: MerchantForecastCell | undefined }) {
+/**
+ * 끼니 하나의 예측 카드 — 이 화면에서 가장 큰 글자가 오는 자리다.
+ * ★카드 전체가 **근거 상세로 가는 링크**다. "13인분"은 결론이고, 클릭하면 어떤 메뉴가 몇 인분인지 ·
+ * 어느 조직 몫이 얼마인지 · 어느 날짜 실적이 근거인지가 나온다.
+ */
+function WindowCard({
+  window,
+  cell,
+  today,
+}: {
+  window: string;
+  cell: MerchantForecastCell | undefined;
+  today: string | null;
+}) {
   const noData = !cell || cell.predicted === null;
+  const { merchantId } = useMerchant();
+  const href = today ? `/merchant/${merchantId}/cell/${today}/${window}` : null;
 
-  return (
+  const card = (
     <div
       className={cn(
         "rounded-lg border px-4 py-4",
         noData ? "border-dashed border-border bg-muted/30" : "border-border bg-background",
+        href && "transition-colors group-hover:border-brand/50",
       )}
     >
       <p className="text-sm font-medium text-muted-foreground">{mealWindowLabel(window)}</p>
@@ -141,6 +160,10 @@ function WindowCard({ window, cell }: { window: string; cell: MerchantForecastCe
           <p className="mt-1 text-xs text-muted-foreground">
             최근 4주 실적이 없어 예측할 수 없습니다. <b className="font-medium">0 인분이 아닙니다.</b>
           </p>
+          {/* 예측은 못 해도 **이미 나간 인분**은 사실이다 — 예측 없음이 "아무 일 없음"으로 읽히지 않게. */}
+          {cell?.soFar != null && (
+            <p className="mt-1 text-xs font-medium text-brand">지금까지 {formatCount(cell.soFar)}인분 나감</p>
+          )}
         </>
       ) : (
         <>
@@ -151,9 +174,24 @@ function WindowCard({ window, cell }: { window: string; cell: MerchantForecastCe
             <span className="text-sm text-muted-foreground">인분</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{basisText(cell)}</p>
+          {cell.soFar != null && (
+            <p className="mt-0.5 text-xs font-medium text-brand">
+              지금까지 {formatCount(cell.soFar)}인분 나감
+            </p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground underline-offset-2 group-hover:underline">
+            근거 보기 →
+          </p>
         </>
       )}
     </div>
+  );
+
+  if (!href) return card;
+  return (
+    <Link href={href} className="group block" aria-label={`${mealWindowLabel(window)} 예측 근거 보기`}>
+      {card}
+    </Link>
   );
 }
 
@@ -185,6 +223,15 @@ export function TodayProgressSection({
   const forecastCovered =
     today !== null && !!forecast.data && forecast.data.from <= today && forecast.data.to >= today;
   const predictedCells = forecastCovered ? cellsOfDate(forecast.data?.cells, today) : [];
+  /**
+   * 오늘 예측 대비 진행률 — 도넛으로 보여줄 비율.
+   *
+   * ★분모가 없거나 0 이면 **그리지 않는다**(null). 예측이 NO_DATA 인 날에 0 으로 나누거나 임의 분모를
+   *   쓰면 "0%" 또는 "∞%" 가 되는데, 둘 다 "아직 준비량을 모른다"와는 완전히 다른 말이다.
+   */
+  const predictedTotal = sumPredicted(predictedCells).total;
+  const progressRatio =
+    predictedTotal !== null && predictedTotal > 0 ? totals.approvedCount / predictedTotal : null;
 
   return (
     <Section
@@ -223,7 +270,23 @@ export function TodayProgressSection({
           <Stat
             label="오늘 승인 (건)"
             value={formatCount(totals.approvedCount)}
-            hint={totals.voidedCount > 0 ? `취소 ${totals.voidedCount}건 별도` : "진행 중"}
+            hint={
+              progressRatio === null
+                ? totals.voidedCount > 0
+                  ? `취소 ${totals.voidedCount}건 별도`
+                  : "진행 중 · 예측이 없어 진행률을 낼 수 없습니다"
+                : `예측 ${formatCount(predictedTotal)}인분 대비${
+                    totals.voidedCount > 0 ? ` · 취소 ${totals.voidedCount}건 별도` : ""
+                  }`
+            }
+            visual={
+              progressRatio === null ? undefined : (
+                <DonutMeter
+                  ratio={progressRatio}
+                  ariaLabel={`오늘 예측 ${predictedTotal}인분 대비 진행률 ${Math.round(progressRatio * 100)}퍼센트`}
+                />
+              )
+            }
           />
           <Stat label="오늘 결제액" value={formatWon(totals.amount)} hint="취소 건 제외 · 진행 중" />
           <Stat label="조직 부담" value={formatWon(totals.orgPaid)} hint="청구 대상" />

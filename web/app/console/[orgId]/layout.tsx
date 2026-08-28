@@ -2,32 +2,17 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ErrorNotice } from "@/components/feedback";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useActiveTabScroll } from "@/lib/useActiveTabScroll";
 import { useApi } from "@/lib/useApi";
 import { useSession } from "@/lib/session";
 import { NoAccessCard } from "@/components/feedback";
 import { OrgProvider } from "../_lib/org-context";
 import { formatCount, orgStatusLabel } from "../_lib/labels";
 import type { AdministeredOrg } from "../_lib/types";
-
-const TABS: { segment: string; label: string }[] = [
-  { segment: "", label: "개요" },
-  { segment: "members", label: "구성원" },
-  { segment: "invitations", label: "초대" },
-  { segment: "structure", label: "조직구조" },
-  // 조직구조 바로 뒤 — "누가 우리 조직인가"를 정한 다음 "그들에게 얼마를 지원하는가"가 오는 순서다.
-  { segment: "meal-policy", label: "식대정책" },
-  { segment: "domains", label: "도메인" },
-  { segment: "forecast", label: "예측" },
-  { segment: "invoices", label: "청구서" },
-  { segment: "roles", label: "역할" },
-  { segment: "audit", label: "활동로그" },
-];
 
 /**
  * 조직 하나의 관리 화면 껍데기 — 머리말(조직 이름·상태)과 탭 내비게이션.
@@ -39,8 +24,6 @@ export default function OrgConsoleLayout({ children }: { children: ReactNode }) 
   const params = useParams();
   const raw = params?.orgId;
   const orgId = Array.isArray(raw) ? raw[0] : (raw ?? "");
-  const pathname = usePathname();
-  const activeTabRef = useActiveTabScroll<HTMLAnchorElement>(pathname);
 
   // 조직 이름은 목록 API 한 번으로 얻는다(조직 단건 조회 API 가 따로 없다).
   const orgs = useApi<AdministeredOrg[]>("/api/orgs/mine");
@@ -76,8 +59,6 @@ export default function OrgConsoleLayout({ children }: { children: ReactNode }) 
   const accessResolved = !orgs.loading && !orgs.error && !memberships.loading && !memberships.error;
   const denied =
     accessResolved && !org && !isMember && session.status === "authenticated" && !session.user.platformAdmin;
-
-  const base = `/console/${orgId}`;
 
   return (
     <OrgProvider value={{ orgId, org, reload: orgs.reload }}>
@@ -127,30 +108,7 @@ export default function OrgConsoleLayout({ children }: { children: ReactNode }) 
           />
         ) : (
           <>
-            <nav
-              aria-label="조직 관리 메뉴"
-              className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"
-            >
-              {TABS.map((tab) => {
-                const href = tab.segment ? `${base}/${tab.segment}` : base;
-                const active = tab.segment ? pathname.startsWith(href) : pathname === base;
-                return (
-                  <Link
-                    key={tab.segment || "overview"}
-                    ref={active ? activeTabRef : undefined}
-                    href={href}
-                    aria-current={active ? "page" : undefined}
-                    className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-                      active
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            {/* 하위 메뉴는 좌측 사이드바(Sidebar + lib/nav ORG_MENU)가 그린다 — 정의 중복 금지. */}
 
             {children}
           </>

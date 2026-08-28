@@ -122,3 +122,33 @@ export function summarizeLedger(rows: MerchantTransaction[]): LedgerTotals {
   }
   return totals;
 }
+
+/** 하루치 신호 요약 — 조직 분해 조각에서 "왜 이 숫자인가"를 접어 올린다(순수 함수 — 회귀 테스트 대상). */
+export interface DaySignals {
+  /** "휴일명 (조직명)" — 같은 항목은 한 번만. */
+  holidays: string[];
+  events: string[];
+  /** 그 날 전 조직 부재 가중 합(연차·반차). */
+  absentWeight: number;
+  /** 일부 조직 근거 없음 — 합계가 하한이라는 뜻. */
+  partial: boolean;
+}
+
+export function daySignalsOf<T extends MerchantForecastCell>(row: DayRow<T>): DaySignals {
+  const holidays = new Set<string>();
+  const events = new Set<string>();
+  const absentByOrg = new Map<string, number>();
+  let partial = false;
+  for (const cell of row.byWindow.values()) {
+    if (cell.partial) partial = true;
+    for (const slice of cell.orgs ?? []) {
+      if (slice.holiday) holidays.add(`${slice.holidayName ?? "휴일"} (${slice.orgName})`);
+      if (slice.event) events.add(`${slice.eventName ?? "행사"} (${slice.orgName})`);
+      // 부재는 날짜 속성이라 끼니마다 같은 값이 반복된다 — 조직당 한 번만 센다(끼니 수만큼 부풀리지 않는다).
+      if (slice.absentWeight > 0) absentByOrg.set(slice.orgId, slice.absentWeight);
+    }
+  }
+  let absentWeight = 0;
+  for (const weight of absentByOrg.values()) absentWeight += weight;
+  return { holidays: [...holidays], events: [...events], absentWeight, partial };
+}

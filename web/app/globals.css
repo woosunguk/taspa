@@ -1,3 +1,4 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -23,6 +24,24 @@
  *   - 기본은 OS 선호(`light dark`)
  *   - `.light`/`.dark` 클래스는 그 위에서 강제(향후 토글을 붙일 때 팔레트를 건드릴 필요가 없다)
  */
+/*
+ * ★**전체 페이지 스케일 75%.**
+ *
+ * 루트 폰트 크기를 줄이면 rem 기반인 것 전부(텍스트·여백·gap·라운드·컴포넌트 높이)가 **비례해** 줄고,
+ * `max-w-[1560px]` 같은 px 폭은 그대로 남는다 — 그래서 "화면은 넓게 쓰고 내용은 콤팩트하게"가 한 줄로
+ * 성립한다. `zoom` 이나 `transform: scale()` 로 하면 컨테이너 폭까지 같이 줄어(1560 × 0.75) 좌우가 다시
+ * 비고, sticky·고정 요소의 좌표계가 어긋난다.
+ *
+ * 값은 **px 이 아니라 %** 다: 브라우저 기본 글자 크기를 키워 둔 사용자의 설정을 덮지 않는다(16px 고정은
+ * 그 설정을 무시한다). 대가는 본문이 작아지는 것이다 — 콘솔은 표·숫자를 한 화면에 많이 넣는 화면이라
+ * 그 교환을 택했지만, 되돌릴 때는 이 한 줄만 100% 로 바꾸면 된다.
+ *
+ * ★차트 내부 라벨·SVG 치수는 px 라 함께 줄지 않는다(의도). 작은 글자를 더 줄이면 읽을 수 없다.
+ */
+html {
+  font-size: 75%;
+}
+
 :root {
   color-scheme: light dark;
 }
@@ -36,28 +55,45 @@
 }
 
 :root {
-  /* 브랜드 */
-  --taspa-blue: light-dark(#1a73e8, #8ab4f8);
-  --taspa-blue-hover: light-dark(#1b66c9, #a5c6fa);
-  --taspa-blue-soft: light-dark(#e8f0fe, #1f2a3d);
+  /*
+   * 브랜드 — **제로웨이스트 그린**. 제품 소개 페이지(taspa-zerowaste)의 팔레트를 그대로 잇는다:
+   * green-600 #159253 / green-700 #0e7043 / cream #f3f7ea / ink #16301f.
+   *
+   * ★소개 페이지의 버튼색(green-600 #159253)을 그대로 쓰지 않고 한 단 진한 green-700 을 쓴다 —
+   *   #159253 위의 흰 글자는 3.99:1 로 AA 미달이다(소개 페이지는 마케팅 카피라 큰 글자지만, 콘솔은
+   *   14px 본문 버튼이 대부분이다). #0e7043 은 흰 글자 6.1:1, soft 배경 위 5.7:1 로 둘 다 통과한다.
+   *   눈으로 보면 거의 같은 초록이고, 접근성만 얻는다.
+   */
+  /*
+   * ★다크 값은 **라이트의 반전이 아니라 따로 고른 값**이다. 처음에 소개 페이지의 lime-bright(#6ee86a)를
+   *   그대로 썼는데, 상대휘도 0.62 로 어두운 카드 위에서 대비가 **11:1** 이었다 — AA 하한(4.5)의 두 배가
+   *   넘는다. 큰 KPI 숫자와 차트 막대가 전부 그 색이라 화면이 눈부셨다(실측 캡처로 확인).
+   *   대비는 "높을수록 좋다"가 아니다: 어두운 배경에서 고휘도 채도색을 넓은 면적에 쓰면 잔상이 남는다.
+   *   #3faa6d 는 휘도 0.31 로 절반이고 대비 6:1 — AA 를 넉넉히 넘기면서 눈부심이 사라진다.
+   *   상한은 `data-display.contrast.test.ts` 가 고정한다(하한만 보던 테스트가 이 결함을 놓쳤다).
+   */
+  --taspa-brand: light-dark(#0e7043, #3faa6d);
+  --taspa-brand-hover: light-dark(#0a5c37, #55c184);
+  --taspa-brand-soft: light-dark(#eefaf0, #12281c);
 
-  /* 중립 — 파랑 쪽으로 아주 살짝 기울인 회색(순수 회색은 무성의해 보인다) */
-  --taspa-ink: light-dark(#202124, #e8eaed);
-  --taspa-muted: light-dark(#5f6368, #9aa0a6);
-  --taspa-faint: light-dark(#80868b, #80868b);
-  --taspa-border: light-dark(#dadce0, #3c4043);
-  --taspa-line: light-dark(#ecedef, #2a2d31);
-  --taspa-surface: light-dark(#ffffff, #1f2023);
-  --taspa-canvas: light-dark(#f8f9fb, #17181a);
+  /* 중립 — 초록 쪽으로 기울인 회색. 순수 회색을 쓰면 크림색 바탕에서 탁하게 보인다. */
+  --taspa-ink: light-dark(#16301f, #e6f0e8);
+  --taspa-muted: light-dark(#6b7a6f, #9db0a3);
+  --taspa-faint: light-dark(#8a998d, #7d9184);
+  --taspa-border: light-dark(#dfe6dc, #2f4136);
+  --taspa-line: light-dark(#eef2ec, #243029);
+  --taspa-surface: light-dark(#ffffff, #16201a);
+  /* 바탕은 흰색이 아니라 **크림**이다(소개 페이지 --cream). 흰 카드가 바탕에서 떠 보이는 근거가 이 색이다. */
+  --taspa-canvas: light-dark(#f3f7ea, #0f1712);
   /*
    * ★표면은 **3단**이다. 그전에는 canvas 와 surface 둘뿐이라, 카드 안에 또 카드를 넣는 자리
    * (통계 타일·요약 박스)가 배경이 같아 테두리로만 구분됐다 — 화면이 "전부 같은 흰 상자"로 보인
    * 가장 큰 원인이다. 안쪽 영역은 **파인다**(sunken): 바탕에서 한 단 내려가야 그 위의 숫자가 뜬다
    * (다크에서도 방향은 같다 — 더 어둡게).
    */
-  --taspa-sunken: light-dark(#f4f6f8, #191a1d);
+  --taspa-sunken: light-dark(#eef2ec, #121b16);
   /* 강조 카드(그 화면에서 유일하게 행동을 요구하는 것)만 한 단 띄운다. 다크에서는 밝기로 띄운다. */
-  --taspa-raised: light-dark(#ffffff, #26282c);
+  --taspa-raised: light-dark(#ffffff, #1d2a22);
 
   /*
    * 그림자 — 지금까지 **하나도 없었다**(카드가 1px ring 만 가졌다). 그래서 섹션 8개가 같은 평면에
@@ -67,10 +103,10 @@
    * ★그림자는 **단층으로 쓴다**(콤마 없이). `light-dark()` 는 콤마를 인자 구분자로 파싱하므로
    *   다층 그림자(`a, b`)를 넣으면 값이 통째로 깨진다 — 조용히 무효가 되는 종류라 눈치채기 어렵다.
    */
-  --taspa-shadow-card: light-dark(0 1px 3px 0 rgb(16 24 40 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.3));
-  --taspa-shadow-raised: light-dark(0 8px 20px -6px rgb(16 24 40 / 0.12), 0 2px 8px -2px rgb(0 0 0 / 0.45));
+  --taspa-shadow-card: light-dark(0 2px 8px 0 rgb(16 48 31 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.3));
+  --taspa-shadow-raised: light-dark(0 12px 32px -10px rgb(16 48 31 / 0.14), 0 2px 8px -2px rgb(0 0 0 / 0.45));
   --taspa-shadow-overlay: light-dark(
-    0 12px 32px -8px rgb(16 24 40 / 0.18),
+    0 24px 60px -16px rgb(16 48 31 / 0.2),
     0 12px 32px -8px rgb(0 0 0 / 0.6)
   );
 
@@ -97,7 +133,7 @@
   --card-foreground: var(--taspa-ink);
   --popover: var(--taspa-surface);
   --popover-foreground: var(--taspa-ink);
-  --primary: var(--taspa-blue);
+  --primary: var(--taspa-brand);
   /*
    * ★버튼 글자색은 배경 파랑과 **함께** 뒤집힌다. 다크의 브랜드 파랑은 밝은 하늘색(#8ab4f8)이라
    * 그 위에 흰 글씨를 두면 대비가 무너진다 — 어두운 글자여야 읽힌다.
@@ -113,14 +149,14 @@
   --secondary-foreground: var(--taspa-ink);
   --muted: var(--taspa-line);
   --muted-foreground: var(--taspa-muted);
-  --accent: var(--taspa-blue-soft);
+  --accent: var(--taspa-brand-soft);
   /*
-   * ★accent 전경은 브랜드 파랑과 **분리한다**. 라이트에서 `--taspa-blue`(#1a73e8)를 그대로 쓰면
+   * ★accent 전경은 브랜드 파랑과 **분리한다**. 라이트에서 `--taspa-brand`(#1a73e8)를 그대로 쓰면
    * soft 배경(#e8f0fe) 위에서 3.93:1 로 AA 미달인데, 이 조합이 하필 **주 네비게이션의 활성 항목**과
    * 모든 메뉴 focus 상태다(14px semibold — large text 완화 대상도 아니다).
    * 배경을 어둡게 하면 그 위 아이콘까지 영향을 받으므로 **전경만** 내린다. 다크는 6.84:1 로 충분해 그대로.
    */
-  --accent-foreground: light-dark(#174ea6, var(--taspa-blue));
+  --accent-foreground: light-dark(#0a5c37, var(--taspa-brand));
   --destructive: var(--taspa-danger);
   --border: var(--taspa-border);
   /*
@@ -130,33 +166,35 @@
    * 폼이 많은 관리·조직 콘솔에서 입력칸의 경계가 사실상 안 보였다.
    */
   --input: light-dark(#9aa0a6, #5f6368);
-  --ring: var(--taspa-blue);
+  --ring: var(--taspa-brand);
 
   /* 차트 — 브랜드 파랑에서 출발해 채도를 낮춰가는 계열(임의 색 나열 금지).
      다크에서는 같은 계열을 밝은 쪽으로 옮긴다(라이트 값 그대로 두면 어두운 바탕에서 뒤 3개가 묻힌다). */
-  --chart-1: var(--taspa-blue);
-  --chart-2: light-dark(#4a90d9, #6fa8dc);
-  --chart-3: light-dark(#7aa9c9, #8fb9cf);
-  --chart-4: light-dark(#a3c0d4, #a7c3d6);
-  --chart-5: light-dark(#c9d6de, #bfcdd6);
+  /* 다크 값은 라이트를 밝게 뒤집지 않고 **한 단 낮춘다** — 막대·영역은 텍스트보다 면적이 커서 같은
+     휘도에서도 더 눈부시다(위 brand 주석과 같은 이유). */
+  --chart-1: light-dark(#159253, #2f8f5c);
+  --chart-2: light-dark(#24b866, #3faa6d);
+  --chart-3: light-dark(#4fd07f, #55c184);
+  --chart-4: light-dark(#a9e8ba, #79d0a2);
+  --chart-5: light-dark(#d6f4dd, #a5e0c1);
 
-  --radius: 0.625rem;
+  --radius: 0.875rem;
 
   --sidebar: var(--taspa-surface);
   --sidebar-foreground: var(--taspa-ink);
-  --sidebar-primary: var(--taspa-blue);
+  --sidebar-primary: var(--taspa-brand);
   --sidebar-primary-foreground: light-dark(#ffffff, #17181a);
-  --sidebar-accent: var(--taspa-blue-soft);
-  --sidebar-accent-foreground: var(--taspa-blue);
+  --sidebar-accent: var(--taspa-brand-soft);
+  --sidebar-accent-foreground: var(--taspa-brand);
   --sidebar-border: var(--taspa-border);
-  --sidebar-ring: var(--taspa-blue);
+  --sidebar-ring: var(--taspa-brand);
 }
 
 @theme inline {
   /* taspa 고유 유틸리티(shadcn 토큰으로 표현되지 않는 것들) */
-  --color-brand: var(--taspa-blue);
-  --color-brand-hover: var(--taspa-blue-hover);
-  --color-brand-soft: var(--taspa-blue-soft);
+  --color-brand: var(--taspa-brand);
+  --color-brand-hover: var(--taspa-brand-hover);
+  --color-brand-soft: var(--taspa-brand-soft);
   --color-ink: var(--taspa-ink);
   --color-faint: var(--taspa-faint);
   --color-line: var(--taspa-line);
@@ -217,8 +255,8 @@
   /* 본문은 Geist(라틴) + 한글은 시스템 폰트로 자연스럽게 폴백시킨다.
      Geist 에는 한글 글리프가 없어, 폴백을 명시하지 않으면 브라우저 기본 한글 폰트가 제각각으로 잡힌다. */
   --font-sans:
-    var(--font-geist), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo",
-    "Malgun Gothic", Arial, sans-serif;
+    "Pretendard Variable", Pretendard, var(--font-geist), -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Malgun Gothic", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-heading: var(--font-sans);
 

@@ -59,17 +59,43 @@ describe("의미색 대비 (WCAG AA 4.5:1)", () => {
   });
 
   /**
+   * KPI 숫자(`Stat` 의 기본 tone). 값은 브랜드 초록이고 배경은 **파인 면**(surface-sunken)이다 —
+   * 두 색이 모두 초록 계열이라 눈으로는 "잘 어울린다"로 보이지만 대비가 무너지면 숫자가 흐려진다.
+   * 대시보드에서 가장 크게 읽혀야 하는 글자라 여기서 고정한다.
+   */
+  it("KPI 숫자 — 브랜드 초록이 파인 면 위에서 AA 를 넘는다", () => {
+    const fg = palette("taspa-brand");
+    const bg = palette("taspa-sunken");
+    expect(contrast(fg.light, bg.light)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(fg.dark, bg.dark)).toBeGreaterThanOrEqual(AA);
+  });
+
+  /**
+   * ★대비의 **상한**. 하한만 보던 동안 다크의 브랜드색이 lime-bright(#6ee86a, 휘도 0.62)였고 어두운
+   * 카드 위에서 11:1 이었다 — AA 는 통과했지만 큰 KPI 숫자와 차트 막대가 전부 그 색이라 화면이
+   * 눈부셨다. "대비가 높을수록 좋다"는 텍스트 가독성 이야기이고, 어두운 배경에서 고휘도 채도색을
+   * 넓은 면적에 쓰는 것은 다른 문제다(잔상·눈피로). 그래서 상한을 함께 고정한다.
+   */
+  it("다크 브랜드색은 필요 이상으로 밝지 않다(눈부심 상한)", () => {
+    const brand = palette("taspa-brand");
+    const sunken = palette("taspa-sunken");
+    const ratio = contrast(brand.dark, sunken.dark);
+    expect(ratio).toBeGreaterThanOrEqual(AA);
+    expect(ratio, "다크 브랜드가 너무 밝다 — 넓은 면적에 쓰면 눈부시다").toBeLessThanOrEqual(9);
+  });
+
+  /**
    * 활성 네비게이션 항목(`bg-accent text-accent-foreground`). 14px semibold 라 large text 완화를 받지 못한다.
-   * `--accent-foreground` 는 브랜드 파랑과 분리돼 있어야 라이트에서 AA 를 넘는다.
+   * `--accent-foreground` 는 브랜드 초록과 분리돼 있어야 라이트에서 AA 를 넘는다.
    */
   it("활성 메뉴 — accent 전경이 soft 배경 위에서 AA 를 넘는다", () => {
-    const bg = palette("taspa-blue-soft");
+    const bg = palette("taspa-brand-soft");
     const fg = CSS.match(/--accent-foreground:\s*light-dark\(\s*(#[0-9a-f]{3,8})\s*,/i);
     expect(fg, "--accent-foreground 가 light-dark() 로 분리돼 있어야 한다").not.toBeNull();
     expect(contrast(fg![1], bg.light)).toBeGreaterThanOrEqual(AA);
 
-    // 다크는 브랜드 파랑을 그대로 쓴다 — 그 조합도 함께 확인한다.
-    const blue = palette("taspa-blue");
-    expect(contrast(blue.dark, bg.dark)).toBeGreaterThanOrEqual(AA);
+    // 다크는 브랜드 초록을 그대로 쓴다 — 그 조합도 함께 확인한다.
+    const brand = palette("taspa-brand");
+    expect(contrast(brand.dark, bg.dark)).toBeGreaterThanOrEqual(AA);
   });
 });

@@ -96,6 +96,15 @@ const nextConfig: NextConfig = {
    */
   output: "standalone",
 
+  /**
+   * 터널(Cloudflare)로 dev 서버를 외부에 노출할 때만 필요하다. Next 16 은 localhost 외
+   * 오리진의 dev 전용 자산 요청을 기본 차단하므로, 이 목록이 없으면 화면이 뜨다 말고 멈춘다.
+   * ★`rewrites()` 의 return 객체가 아니라 **이 위치**여야 한다 — 그 안에 두면 Next 가 알 수 없는
+   *   키로 보고 `rewrites must return an array` 로 기동 자체가 실패한다(실제로 겪었다).
+   * 운영 배포는 `next build` 산출물을 쓰므로 이 설정과 무관하다.
+   */
+  allowedDevOrigins: ["*.trycloudflare.com"],
+
   async rewrites() {
     return {
       beforeFiles: [

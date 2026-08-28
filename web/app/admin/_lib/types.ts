@@ -137,6 +137,8 @@ export interface MerchantView {
   siteId: string | null;
   /** 가맹 그레인 집계·예측의 하루 경계 앵커(V29). 미전송 수정은 서버가 기존 값을 유지한다. */
   timezone: string;
+  /** 정액 단가(원). null 이면 POS 가 금액을 직접 입력받는다. */
+  defaultPriceMinor: number | null;
   createdAt: string;
   updatedAt: string;
 }

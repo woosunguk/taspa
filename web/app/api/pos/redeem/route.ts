@@ -45,6 +45,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       token: requireString(payload.token, "QR 코드", MAX_QR_TOKEN_LENGTH),
       amountMinor: requireAmountMinor(payload.amountMinor),
       posTxnId: requireString(payload.posTxnId, "거래 번호", MAX_POS_TXN_ID_LENGTH),
+      /**
+       * 손님이 받은 메뉴(선택). 한 끼니에 코너가 여럿일 때 **단말만이 아는 정보**라 서버가 추측하지
+       * 않는다. 형식만 통과시키고 판정은 서버가 한다 — 그 끼니의 메뉴가 아니면 결제는 그대로 승인되고
+       * 응답 `menuName` 이 null 로 와서 화면이 "메뉴 미기록"을 표시한다(결제를 메타데이터로 막지 않는다).
+       */
+      menuId: typeof payload.menuId === "string" && payload.menuId.length > 0 ? payload.menuId : undefined,
     };
 
     const result = await callMerchantApi(config.config, "/api/merchant/redeem", body);

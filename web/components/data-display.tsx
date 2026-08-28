@@ -19,6 +19,11 @@ import { cn } from "@/lib/utils";
  * ★배경은 **파인 면**(`surface-sunken`)이다. 카드 안에 또 카드(흰 배경 + 테두리)를 넣으면 배경이 같아
  * 테두리로만 구분되는데, 그게 화면이 "전부 같은 흰 상자"로 보이던 원인이었다.
  *
+ * ★값은 **브랜드 초록**이다(제로웨이스트 테마). 제품 소개 페이지의 KPI 카드가 전부 큰 초록 숫자이고,
+ * 그게 이 제품의 첫인상을 만드는 요소다. 초록은 여기서 "좋다"는 의미가 아니라 **브랜드 강조**이므로
+ * 환불·감소 같은 값에도 그대로 쓴다 — 의미를 실어야 할 때는 호출부가 `tone` 을 넘긴다.
+ * 대비는 `data-display.contrast.test.ts` 가 파인 면 위에서 AA 를 넘는지 고정한다.
+ *
  * ★크기는 **뷰포트가 아니라 담긴 칸**을 보고 정한다(`@container`). 같은 타일이 4열 그리드에도, 넓은
  * 단독 칸에도 놓이므로 뷰포트 기준으로 키우면 좁은 칸에서 숫자가 줄바꿈된다. 부모에 `@container` 를
  * 붙여 두면 여기서 `@lg:` 가 그 칸의 폭을 본다.
@@ -27,24 +32,43 @@ export function Stat({
   label,
   value,
   hint,
+  visual,
   tone = "default",
   emphasis = false,
+  variant = "tile",
   className,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
+  /**
+   * 값 오른쪽의 미니 시각화(스파크라인·도넛). 숫자가 "얼마"를 말하고 이 그림이 "어느 방향인가"를 말한다.
+   *
+   * ★여기 들어가는 것은 **축·라벨이 없는 그림**이어야 한다. 작은 자리에 눈금을 넣으면 숫자와 그림이
+   *   서로를 가린다 — 자세한 축이 필요하면 그건 KPI 가 아니라 차트 섹션의 일이다.
+   */
+  visual?: ReactNode;
   /** 값 자체의 의미색. 금액·수량은 default 로 두고, 경고성 수치에만 danger/warning 을 쓴다. */
   tone?: "default" | "danger" | "warning" | "success" | "muted";
   /** 그 묶음에서 **가장 중요한 하나**에만. 둘이면 강조가 사라진다. */
   emphasis?: boolean;
+  /**
+   * `tile`(기본) = **카드 안**에 들어가는 파인 면. `card` = 페이지 바탕에 **직접** 놓이는 떠 있는 카드.
+   *
+   * ★둘을 나눈 이유: 카드 안에 흰 카드를 넣으면 배경이 같아 테두리로만 구분되고(그게 "전부 같은 흰 상자"의
+   *   원인이었다), 반대로 크림 바탕에 파인 면을 놓으면 배경보다 어두워 움푹 들어가 보인다. 같은 컴포넌트가
+   *   어디에 놓이느냐로 표면이 달라져야 한다.
+   */
+  variant?: "tile" | "card";
   className?: string;
 }) {
   return (
     // `<dt>`/`<dd>` 는 `<dl>` 의 자식이어야 유효하다 — 타일 하나가 한 쌍짜리 정의 목록이 된다.
     <dl
       className={cn(
-        "surface-sunken flex min-w-0 flex-col gap-1 rounded-lg px-4 py-3.5",
+        "flex min-w-0 flex-col gap-1 rounded-lg border px-4 py-3.5",
+        variant === "tile" && "surface-sunken border-border/60",
+        variant === "card" && "border-border bg-card shadow-[var(--shadow-card)]",
         emphasis && "ring-1 ring-primary/25",
         className,
       )}
@@ -56,18 +80,25 @@ export function Stat({
         불일치도 함께 사라진다.
       */}
       <dt className="text-label text-muted-foreground">{label}</dt>
-      <dd
-        className={cn(
-          "tabular text-metric-sm @lg:text-metric",
-          tone === "danger" && "text-danger",
-          tone === "warning" && "text-warning",
-          tone === "success" && "text-success",
-          tone === "muted" && "text-muted-foreground",
-          tone === "default" && "text-foreground",
-        )}
-      >
-        {value}
-      </dd>
+      {/*
+        값과 그림을 **한 줄에** 둔다(그림은 오른쪽). 세로로 쌓으면 4열 그리드에서 타일 높이가 제각각이 되고,
+        높이를 맞추려 여백을 넣으면 숫자가 카드 위쪽에 떠 버린다.
+      */}
+      <div className="flex items-center justify-between gap-3">
+        <dd
+          className={cn(
+            "tabular min-w-0 text-metric-sm @lg:text-metric",
+            tone === "danger" && "text-danger",
+            tone === "warning" && "text-warning",
+            tone === "success" && "text-success",
+            tone === "muted" && "text-muted-foreground",
+            tone === "default" && "text-brand",
+          )}
+        >
+          {value}
+        </dd>
+        {visual && <div className="shrink-0">{visual}</div>}
+      </div>
       {/*
         ★`hint` 는 `<div>` 다(`<p>` 가 아니라). ReactNode 를 받는 자리라 호출부가 막대·배지 같은 블록
         요소를 넘길 수 있는데, `<p>` 안에 `<div>` 가 들어가면 **HTML 이 무효**라 브라우저가 태그를

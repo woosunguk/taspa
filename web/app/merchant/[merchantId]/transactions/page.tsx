@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState, ErrorNotice, RowsSkeleton } from "@/components/feedback";
 import { DownloadLink } from "@/components/DownloadLink";
+import { Sparkline, StackedBarChart } from "@/components/charts";
 import { useApi } from "@/lib/useApi";
 import { cn } from "@/lib/utils";
 import { Notice, Section, Segmented, Stat, TableScroll } from "../../_components/kit";
@@ -21,6 +22,7 @@ import {
   rangeQuery,
   transactionStatusLabel,
 } from "../../_lib/format";
+import { dailyPortions } from "../../_lib/insights";
 import { summarize } from "../../_lib/summarize";
 import type { MerchantTransaction, MerchantTransactionsResponse } from "../../_lib/types";
 
@@ -68,10 +70,17 @@ export default function MerchantTransactionsPage() {
 
   const totals = useMemo(() => summarize(rows), [rows]);
 
+  const daily = useMemo(() => dailyPortions(rows, data?.timezone), [rows, data?.timezone]);
+  /** 스파크라인용 일별 합계. 점이 2개 미만이면 Sparkline 이 스스로 그리지 않는다(장식 방지). */
+  const dailyTotals = useMemo(
+    () => daily.map((d) => d.segments.reduce((acc, seg) => acc + seg.value, 0)),
+    [daily],
+  );
+
   return (
     <div className="flex flex-col gap-5">
       <Section
-        title="식수 로그"
+        title="밀로그"
         description="매장에서 승인된 식권 결제 내역입니다. 금액은 조직 부담(청구 대상)과 개인 부담으로 나뉘어 있습니다."
         action={
           <div className="flex items-center gap-2">
@@ -132,11 +141,14 @@ export default function MerchantTransactionsPage() {
         {query.loading && !data && <RowsSkeleton rows={5} />}
 
         {data && rows.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Stat
               label="승인"
               value={`${formatCount(totals.approvedCount)}건`}
               hint={totals.voidedCount > 0 ? `취소 ${totals.voidedCount}건 별도` : undefined}
+              visual={
+                <Sparkline values={dailyTotals} ariaLabel={`일별 승인 식수 추세 (${dailyTotals.length}일)`} />
+              }
             />
             <Stat label="결제액 합계" value={formatWon(totals.amount)} hint="취소 건 제외" />
             <Stat label="조직 부담(청구 대상)" value={formatWon(totals.orgPaid)} />
@@ -158,12 +170,49 @@ export default function MerchantTransactionsPage() {
 
         {!query.loading && data && rows.length === 0 && (
           <EmptyState
+            illustration="/brand/cook.png"
             title="이 기간에 거래가 없습니다"
             description="기간을 넓혀 보세요. 결제는 POS 단말에서 손님의 QR 을 읽을 때 기록됩니다."
           />
         )}
 
-        {rows.length > 0 && <TransactionTable rows={rows} timezone={data?.timezone} />}
+        {/*
+          ★**표가 이 화면의 메인이다** — 밀로그의 목적은 raw 데이터 분석(대사·검증·조회)이고, 위 그래프는
+          그 표를 읽기 전에 기간의 모양을 훑는 보조다. 한때 표를 `<details>` 로 접어 두었는데, 그러면
+          매장이 이 화면에 오는 이유(authId·posTxnId·환불액을 자기 POS 기록과 맞대기)가 한 번의 클릭
+          뒤로 숨는다. 그래프를 앞세우는 것과 표를 숨기는 것은 다른 결정이다.
+        */}
+        {rows.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-label text-muted-foreground">
+              거래 상세 {formatCount(rows.length)}건 — 승인 식별자·POS 거래번호·환불액 포함
+            </p>
+            <TransactionTable rows={rows} timezone={data?.timezone} />
+          </div>
+        )}
+
+        {/*
+          ★차트는 **표 아래**다. 위에 두었을 때 KPI·안내·범례까지 겹쳐 표가 첫 화면 밖으로 밀렸다 —
+          raw 데이터 조회가 이 화면의 목적인데 목적물이 스크롤 뒤에 있었다. 기간의 모양을 훑는 용도는
+          표를 보고 난 다음에도 유효하다.
+        */}
+
+        {daily.length > 0 && (
+          <StackedBarChart
+            data={daily}
+            unit="인분"
+            /* 표가 메인이므로 그래프는 낮게 — 기본 180px 이면 첫 화면에서 표가 밀려난다. */
+            height={120}
+            ariaLabel={`일자별 승인 식수 (${daily.length}일)`}
+            /* 표시 상한에 걸리면 이 그래프는 **최근 N건이 걸친 날짜만** 그린다 — 완전한 일별 계열처럼
+               보이는 것이 가장 위험하므로 그래프 자신이 그 사실을 말한다. */
+            note={
+              data?.rowsTruncated
+                ? `표시 상한(${formatCount(data.limit)}건)에 걸린 구간입니다 — 앞쪽 날짜가 빠져 있을 수 있습니다.`
+                : undefined
+            }
+          />
+        )}
       </Section>
     </div>
   );

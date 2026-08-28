@@ -103,12 +103,33 @@ export interface MerchantForecastBasis {
 }
 
 /** (날짜 × 끼니) 예측 셀. `predicted === null` 은 **0 인분이 아니라 "데이터 없음"** 이다. */
+/**
+ * 조직 분해 한 조각 — 매장 총 예측은 이 조각들의 합이고, 캘린더·연차 신호는 조각 단위로 적용된다
+ * (매장 총합에 A 조직 휴일을 곱하면 B 조직 손님까지 깎이기 때문).
+ */
+export interface MerchantOrgSlice {
+  orgId: string;
+  orgName: string;
+  predicted: number | null;
+  method: string;
+  holiday: boolean;
+  holidayName: string | null;
+  event: boolean;
+  eventName: string | null;
+  absentWeight: number;
+}
+
 export interface MerchantForecastCell {
   date: string;
   mealWindow: string;
   predicted: number | null;
   method: string;
   basis: MerchantForecastBasis;
+  orgs?: MerchantOrgSlice[];
+  /** 일부 조직 근거 없음 — predicted 는 아는 조직의 합(하한)이다. */
+  partial?: boolean;
+  /** 매장-로컬 오늘 셀에서 지금까지 이미 나간 인분(nowcast 하한의 근거). 다른 날은 없다. */
+  soFar?: number | null;
 }
 
 /** GET /api/merchant-console/{id}/forecast — from 미지정 시 매장-로컬 내일부터 7일. */
@@ -122,6 +143,17 @@ export interface MerchantForecastResponse {
   windowTruncated: boolean;
   mealWindow: string | null;
   cells: MerchantForecastCell[];
+  orgs?: MerchantOrgInfo[];
+}
+
+/** 이 매장을 이용 중인 조직 한 줄(실적순 정렬). */
+export interface MerchantOrgInfo {
+  orgId: string;
+  name: string;
+  recentPortions: number;
+  upcomingHolidays: number;
+  upcomingEvents: number;
+  upcomingAbsentWeight: number;
 }
 
 /** 백테스트 셀 — "그 시점에 예측했을 값" vs 실적. 실적이 없는 셀의 actual 은 0 이다. */
@@ -187,4 +219,37 @@ export interface MerchantSettlement {
   selfPaidTotalMinor: number;
   refundedTotalMinor: number;
   lines: MerchantSettlementLine[];
+}
+
+/** GET /forecast/cell — 셀 하나의 근거 상세(taspa MerchantCellDetail 미러). */
+export interface MerchantBasisPoint {
+  date: string;
+  actual: number;
+}
+
+export interface MerchantOrgSliceDetail {
+  slice: MerchantOrgSlice;
+  basis: MerchantBasisPoint[];
+  headcount: number | null;
+}
+
+export interface MerchantMenuShare {
+  name: string;
+  corner: string | null;
+  category: string;
+  plannedPortions: number | null;
+  share: number | null;
+  predicted: number | null;
+  sampleQuantity: number;
+}
+
+export interface MerchantCellDetail {
+  date: string;
+  mealWindow: string;
+  timezone: string;
+  cell: MerchantForecastCell;
+  orgs: MerchantOrgSliceDetail[];
+  menus: MerchantMenuShare[];
+  menuLearnFrom: string | null;
+  menuLearnTo: string | null;
 }

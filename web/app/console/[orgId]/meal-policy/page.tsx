@@ -143,7 +143,7 @@ export default function MealPolicyPage() {
   return (
     <div className="flex flex-col gap-5">
       <Section
-        title="식대 기준"
+        title="식사 기준"
         description="이 조직 구성원 전체에 적용됩니다. 저장하면 직원 화면과 계산대가 곧바로 같은 값을 사용합니다."
         action={
           policy.data?.usingDefaults ? (

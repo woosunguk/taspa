@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ErrorNotice } from "@/components/feedback";
@@ -13,12 +13,6 @@ import { NoAccessCard } from "@/components/feedback";
 import { MerchantProvider } from "../_lib/merchant-context";
 import { merchantStatusLabel, merchantCategoryLabel } from "../_lib/format";
 import type { MyMerchantsResponse } from "../_lib/types";
-
-const TABS: { segment: string; label: string }[] = [
-  { segment: "", label: "개요" },
-  { segment: "transactions", label: "식수 로그" },
-  { segment: "settlement", label: "정산" },
-];
 
 /**
  * 매장 하나의 관리 화면 껍데기 — 머리말(매장 이름·타임존)과 탭 내비게이션.
@@ -33,7 +27,6 @@ export default function MerchantConsoleLayout({ children }: { children: ReactNod
   const params = useParams();
   const raw = params?.merchantId;
   const merchantId = Array.isArray(raw) ? raw[0] : (raw ?? "");
-  const pathname = usePathname();
 
   // 매장 이름은 목록 API 한 번으로 얻는다(매장 단건 조회 API 가 따로 없다).
   const mine = useApi<MyMerchantsResponse>("/api/merchant-console/mine");
@@ -60,8 +53,6 @@ export default function MerchantConsoleLayout({ children }: { children: ReactNod
     !merchant &&
     session.status === "authenticated" &&
     !session.user.platformAdmin;
-
-  const base = `/merchant/${merchantId}`;
 
   return (
     <MerchantProvider value={{ merchantId, merchant }}>
@@ -120,29 +111,7 @@ export default function MerchantConsoleLayout({ children }: { children: ReactNod
           />
         ) : (
           <>
-            <nav
-              aria-label="매장 관리 메뉴"
-              className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"
-            >
-              {TABS.map((tab) => {
-                const href = tab.segment ? `${base}/${tab.segment}` : base;
-                const active = tab.segment ? pathname.startsWith(href) : pathname === base;
-                return (
-                  <Link
-                    key={tab.segment || "forecast"}
-                    href={href}
-                    aria-current={active ? "page" : undefined}
-                    className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-                      active
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            {/* 하위 메뉴는 좌측 사이드바(lib/nav MERCHANT_MENU)가 그린다. */}
 
             {children}
           </>

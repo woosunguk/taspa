@@ -24,6 +24,19 @@ export interface RedeemResponse {
    */
   orgRefundedMinor?: number | null;
   selfRefundedMinor?: number | null;
+
+  /**
+   * 이 거래에 귀속된 메뉴 이름. null 은 "기록 안 됨" — 그 끼니에 식단이 없거나, 코너가 여럿인데
+   * 단말이 고르지 않았거나, 보낸 menuId 가 그 끼니 메뉴가 아니었다. 결제와는 무관하다(분석 축).
+   */
+  menuName?: string | null;
+}
+
+/** GET /api/pos/menus 응답 = taspa `MerchantMenusResponse`. 지금 끼니의 배식 코너 목록. */
+export interface PosMenusResponse {
+  mealWindow: string;
+  menuDate: string;
+  menus: Array<{ menuId: string; name: string; category: string; corner: string | null }>;
 }
 
 /** 오류 응답 — taspa `{errorCode, message}` 와 단말 BFF 가 만드는 코드가 같은 형태로 온다. */

@@ -26,12 +26,14 @@ import {
   changeTypeLabel,
   employmentStatusLabel,
   employmentTypeLabel,
+  formatCount,
   formatDate,
   formatDateTime,
   membershipStatusLabel,
   roleLabel,
 } from "../../_lib/labels";
 import { flattenTree } from "../../_lib/tree";
+import { AbsenceSection } from "./AbsenceSection";
 import type { Department, Membership, MembershipHistoryEntry, Site } from "../../_lib/types";
 
 /**
@@ -48,6 +50,10 @@ export default function MembersPage() {
   const sites = useApi<Site[]>(orgPath(orgId, "/sites"), [orgId]);
 
   const [keyword, setKeyword] = useState("");
+  const [deptFilter, setDeptFilter] = useState<string | null>(null);
+  const [siteFilter, setSiteFilter] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [employmentFilter, setEmploymentFilter] = useState<string | null>(null);
   const [editing, setEditing] = useState<Membership | null>(null);
   const [historyOf, setHistoryOf] = useState<Membership | null>(null);
 
@@ -63,16 +69,42 @@ export default function MembersPage() {
     return map;
   }, [sites.data]);
 
+  const departmentFilterOptions: Option[] = useMemo(
+    () =>
+      flattenTree(departments.data ?? []).map(({ item, depth }) => ({
+        value: item.id,
+        label: `${"  ".repeat(depth)}${depth > 0 ? "└ " : ""}${item.name}`,
+      })),
+    [departments.data],
+  );
+  const siteFilterOptions: Option[] = useMemo(
+    () => (sites.data ?? []).map((site) => ({ value: site.id, label: site.name })),
+    [sites.data],
+  );
+
+  /**
+   * 자유 검색 + 구조 필터. 조직이 커지면 검색어만으로는 "개발팀의 재직 중인 사람"을 뽑을 수 없다 —
+   * 부서·사업장·역할·재직상태는 목록 자체를 좁히는 축이라 별도 입력이 필요하다.
+   *
+   * ★필터링은 **화면에서** 한다. 여기 담긴 목록은 이미 서버 인가를 통과한 범위(전사 또는 위임 서브트리)라
+   *   더 좁히는 것은 보기 편의일 뿐이고, 서버로 조건을 넘기면 위임 범위 계산과 뒤섞여 경계가 흐려진다.
+   */
   const filtered = useMemo(() => {
     const rows = members.data ?? [];
     const needle = keyword.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((member) =>
-      [member.email, member.jobTitle, member.employeeId, member.department]
+    return rows.filter((member) => {
+      if (deptFilter && member.departmentId !== deptFilter) return false;
+      if (siteFilter && member.siteId !== siteFilter) return false;
+      if (roleFilter && member.role !== roleFilter) return false;
+      if (employmentFilter && member.employmentStatus !== employmentFilter) return false;
+      if (!needle) return true;
+      return [member.displayName, member.email, member.jobTitle, member.employeeId, member.department]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(needle)),
-    );
-  }, [members.data, keyword]);
+        .some((value) => value!.toLowerCase().includes(needle));
+    });
+  }, [members.data, keyword, deptFilter, siteFilter, roleFilter, employmentFilter]);
+
+  const filterActive = Boolean(keyword || deptFilter || siteFilter || roleFilter || employmentFilter);
 
   // 성공을 `true` 로 표현한다 — useMutation 은 실패 시 undefined 를 돌려주므로 void 반환이면 구분할 수 없다.
   const remove = useMutation(async (member: Membership) => {
@@ -89,7 +121,7 @@ export default function MembersPage() {
           <Input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="이메일·직함·사번 검색"
+            placeholder="이름·이메일·직함·사번 검색"
             className="w-56"
             aria-label="구성원 검색"
           />
@@ -97,14 +129,64 @@ export default function MembersPage() {
       >
         {members.error && <ErrorNotice message={members.error} onRetry={members.reload} />}
         {remove.error && <ErrorNotice message={remove.error} onDismiss={remove.clearError} />}
+
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="부서" htmlFor="filter-dept">
+            <Choice
+              id="filter-dept"
+              className="w-44"
+              value={deptFilter}
+              onChange={setDeptFilter}
+              options={departmentFilterOptions}
+              emptyLabel="전체"
+            />
+          </Field>
+          <Field label="사업장" htmlFor="filter-site">
+            <Choice
+              id="filter-site"
+              className="w-40"
+              value={siteFilter}
+              onChange={setSiteFilter}
+              options={siteFilterOptions}
+              emptyLabel="전체"
+            />
+          </Field>
+          <Field label="역할" htmlFor="filter-role">
+            <Choice
+              id="filter-role"
+              className="w-36"
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={ROLE_OPTIONS}
+              emptyLabel="전체"
+            />
+          </Field>
+          <Field label="재직 상태" htmlFor="filter-employment">
+            <Choice
+              id="filter-employment"
+              className="w-36"
+              value={employmentFilter}
+              onChange={setEmploymentFilter}
+              options={EMPLOYMENT_STATUS_OPTIONS}
+              emptyLabel="전체"
+            />
+          </Field>
+          {filterActive && (
+            <span className="pb-2 text-sm text-muted-foreground">
+              {formatCount(filtered.length)} / {formatCount((members.data ?? []).length)}명
+            </span>
+          )}
+        </div>
+
         {members.loading && <RowsSkeleton rows={5} />}
 
         {!members.loading && !members.error && filtered.length === 0 && (
           <EmptyState
-            title={keyword ? "검색 결과가 없습니다" : "구성원이 없습니다"}
+            illustration="/brand/manager.png"
+            title={filterActive ? "조건에 맞는 구성원이 없습니다" : "구성원이 없습니다"}
             description={
-              keyword
-                ? "다른 검색어를 입력해 보세요."
+              filterActive
+                ? "검색어나 필터를 바꿔 보세요."
                 : "초대 탭에서 구성원을 초대하면 수락 후 이 목록에 나타납니다."
             }
           />
@@ -121,7 +203,7 @@ export default function MembersPage() {
                   ②관리 열은 sticky 로 고정해 좁은 화면에서도 항상 손이 닿게 한다.
                 */}
                 <TableRow>
-                  <TableHead>이메일</TableHead>
+                  <TableHead>구성원</TableHead>
                   <TableHead>역할</TableHead>
                   <TableHead className="hidden lg:table-cell">부서</TableHead>
                   <TableHead className="hidden lg:table-cell">사업장</TableHead>
@@ -136,7 +218,12 @@ export default function MembersPage() {
                   <TableRow key={member.userId}>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
-                        <span>{member.email ?? "(이메일 없음)"}</span>
+                        {/* 이름이 있으면 이름을 앞세우고 이메일을 아래 줄로 — 역할·부서를 정하는 화면에서
+                            사람을 식별할 정보가 이메일 로컬파트뿐이면 누가 누군지 알 수 없다. */}
+                        <span>{member.displayName ?? member.email ?? "(이름·이메일 없음)"}</span>
+                        {member.displayName && member.email && (
+                          <span className="text-xs font-normal text-muted-foreground">{member.email}</span>
+                        )}
                         {member.status !== "ACTIVE" && (
                           <span className="text-xs text-[color:var(--taspa-warning)]">
                             {membershipStatusLabel(member.status)}
@@ -207,6 +294,8 @@ export default function MembersPage() {
           </TableScroll>
         )}
       </Section>
+
+      <AbsenceSection orgId={orgId} members={members.data ?? []} />
 
       {editing && (
         <MemberEditor

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   type ApiErrorBody,
   type Approval,
   type Decline,
+  type PosMenusResponse,
   type RedeemResponse,
 } from "./types";
 
@@ -45,12 +46,24 @@ interface TerminalStatus {
   enrollmentProblem: "missing" | "weak-key" | null;
   enrolled: boolean;
   /** 이 단말이 결속된 가맹점. 조회 실패 시 null(상태 응답 자체는 살린다). */
-  merchant: { merchantId: string; name: string; category: string; timezone: string } | null;
+  merchant: {
+    merchantId: string;
+    name: string;
+    category: string;
+    timezone: string;
+    /** 정액 단가(원). null 이면 계산원이 금액을 직접 입력한다. */
+    defaultPriceMinor: number | null;
+  } | null;
 }
 
 type Stage =
   | { kind: "scan" }
   | { kind: "amount"; token: string }
+  /**
+   * 정액 단가로 **금액 입력 없이** 승인을 요청하는 중. 이 단계가 없으면 스캔 직후 요청이 나가는 동안
+   * 화면이 여전히 스캐너라, 계산원은 아무 일도 일어나지 않은 것으로 보고 QR 을 다시 댄다.
+   */
+  | { kind: "charging"; token: string; amountMinor: number }
   | { kind: "approved"; approval: Approval }
   | {
       kind: "declined";
@@ -108,7 +121,7 @@ export default function PosPage() {
 
   return (
     <Screen merchant={data.merchant}>
-      <Terminal />
+      <Terminal fixedPriceMinor={data.merchant?.defaultPriceMinor ?? null} />
     </Screen>
   );
 }
@@ -149,13 +162,27 @@ function Screen({
   );
 }
 
-function Terminal() {
+function Terminal({ fixedPriceMinor }: { fixedPriceMinor: number | null }) {
   const [stage, setStage] = useState<Stage>({ kind: "scan" });
+  /**
+   * 정액 단가가 있어도 **금액 입력으로 되돌릴 수 있어야 한다** — 행사가·부분 결제처럼 정액을 벗어나는
+   * 일이 현장에 있고, 그때 단말을 바꾸거나 관리자에게 설정 변경을 요청하게 만들면 손님을 세워 둔다.
+   */
+  const [manualOverride, setManualOverride] = useState(false);
   const [digits, setDigits] = useState("");
   const [busy, setBusy] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [voidError, setVoidError] = useState<string | null>(null);
   const [recent, setRecent] = useState<Approval[]>([]);
+  /**
+   * 배식 코너 선택 — **끈끈하다(sticky)**. 계산원은 보통 한 코너에 앉아 연속으로 찍으므로 손님마다
+   * 다시 고르게 하면 계산이 느려지고, 그러면 현장은 선택을 생략한다(축이 다시 빈다). 코너를 옮길 때만
+   * 바꾸면 된다. 메뉴가 하나뿐이거나 없으면 이 UI 자체가 나타나지 않는다(서버가 단일 메뉴를 자동 귀속).
+   */
+  const [menuId, setMenuId] = useState<string | null>(null);
+  // Terminal 은 등록·설정 게이트를 통과한 뒤에만 마운트된다(PosPage 상단) — 조건 없이 조회해도 안전하다.
+  const menus = useApi<PosMenusResponse>("/api/pos/menus");
+  const menuChoices = menus.data?.menus ?? [];
 
   /*
    * ★멱등키(posTxnId)의 수명이 이 화면의 유일한 안전 장치다.
@@ -195,7 +222,7 @@ function Terminal() {
       try {
         const response = await api.post<RedeemResponse>(
           "/api/pos/redeem",
-          { token, amountMinor, posTxnId: posTxnIdFor(token, amountMinor) },
+          { token, amountMinor, posTxnId: posTxnIdFor(token, amountMinor), menuId: menuId ?? undefined },
           // 세션 화면이 아니다 — 401 을 로그인으로 해석해 계산대를 로그인 페이지로 보내면 안 되고,
           // CSRF 토큰(taspa 세션용)을 받으러 가느라 승인이 늦어질 이유도 없다.
           { noRedirect: true, noCsrf: true },
@@ -228,7 +255,7 @@ function Terminal() {
         setBusy(false);
       }
     },
-    [posTxnIdFor],
+    [posTxnIdFor, menuId],
   );
 
   const voidApproval = useCallback(async (authId: string) => {
@@ -316,14 +343,93 @@ function Terminal() {
     }
   }, []);
 
-  // 스캐너에 넘기는 콜백은 안정적이어야 한다 — 리렌더마다 새 함수를 주면 카메라가 껐다 켜진다.
-  const handleScan = useCallback((token: string) => setStage({ kind: "amount", token }), []);
+  /**
+   * 정액 단가가 설정돼 있으면 **금액 입력을 건너뛰고 즉시 승인**한다(계산원의 타이핑이 사라진다).
+   * 없거나 수동 전환 상태면 지금까지처럼 금액 입력 단계로 간다.
+   *
+   * 스캐너에 넘기는 콜백은 안정적이어야 한다 — 리렌더마다 새 함수를 주면 카메라가 껐다 켜진다.
+   * 그래서 의존성은 값(price)과 안정 콜백(approve)뿐이다.
+   */
+  const autoPrice = manualOverride ? null : fixedPriceMinor;
+  const handleScan = useCallback(
+    (token: string) => {
+      if (autoPrice !== null && autoPrice > 0) {
+        setStage({ kind: "charging", token, amountMinor: autoPrice });
+        void approve(token, autoPrice);
+        return;
+      }
+      setStage({ kind: "amount", token });
+    },
+    [autoPrice, approve],
+  );
 
   const amount = amountFromDigits(digits);
 
   return (
     <>
-      {stage.kind === "scan" && <QrScanner onScan={handleScan} />}
+      {stage.kind === "scan" && (
+        <div className="flex flex-col gap-4">
+          {autoPrice !== null && (
+            <div className="rounded-xl border border-border bg-[color:var(--taspa-brand-soft)] px-4 py-3">
+              <p className="text-base text-foreground">
+                정액 <strong className="text-brand">{formatWon(autoPrice)}</strong> — QR 을 읽으면 바로
+                승인됩니다.
+              </p>
+              <button
+                type="button"
+                className="mt-1 text-sm text-muted-foreground underline"
+                onClick={() => setManualOverride(true)}
+              >
+                이번 손님은 금액을 직접 입력
+              </button>
+            </div>
+          )}
+          {autoPrice === null && fixedPriceMinor !== null && (
+            <div className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
+              <p className="text-base text-foreground">금액 직접 입력 모드</p>
+              <button
+                type="button"
+                className="text-sm text-brand underline"
+                onClick={() => setManualOverride(false)}
+              >
+                정액({formatWon(fixedPriceMinor)})으로 되돌리기
+              </button>
+            </div>
+          )}
+          {menuChoices.length > 1 && (
+            <div className="rounded-xl border border-border px-4 py-3">
+              <p className="mb-2 text-sm text-muted-foreground">
+                배식 코너 — 손님이 받은 메뉴를 선택하면 코너별 식수가 집계됩니다 (결제와는 무관)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {menuChoices.map((menu) => (
+                  <button
+                    key={menu.menuId}
+                    type="button"
+                    className={
+                      menuId === menu.menuId
+                        ? "rounded-lg border border-brand bg-[color:var(--taspa-brand-soft)] px-4 py-2 text-base font-medium text-brand"
+                        : "rounded-lg border border-border px-4 py-2 text-base text-foreground"
+                    }
+                    onClick={() => setMenuId((current) => (current === menu.menuId ? null : menu.menuId))}
+                  >
+                    {menu.corner ? `${menu.corner} · ` : ""}
+                    {menu.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <QrScanner onScan={handleScan} />
+        </div>
+      )}
+
+      {stage.kind === "charging" && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-border px-4 py-10">
+          <p className="text-2xl font-semibold text-brand">{formatWon(stage.amountMinor)}</p>
+          <p className="text-base text-muted-foreground">승인 요청 중…</p>
+        </div>
+      )}
 
       {stage.kind === "amount" && (
         <div className="flex flex-col gap-4">
@@ -447,8 +553,39 @@ function DeclinedPanel({
  */
 function EnrollmentGate({ onEnrolled }: { onEnrolled: () => void }) {
   const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
+  // URL 에 키가 실려 왔으면 첫 렌더부터 "등록 중"이다 — effect 안의 동기 setState 는 CI 게이트
+  // (react-hooks/set-state-in-effect)가 막고, 실제로도 한 프레임 동안 입력 폼이 번쩍인다.
+  const [busy, setBusy] = useState(
+    () => typeof window !== "undefined" && new URL(window.location.href).searchParams.has("key"),
+  );
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * URL 자동 등록 — `/pos?key=<등록 키>` 로 열면 입력 없이 곧바로 등록을 시도한다.
+   * 매장 운영자가 단말 여러 대를 세팅할 때 링크(또는 그 링크의 QR) 하나로 끝내기 위한 경로다.
+   *
+   * ★키는 읽는 **즉시 URL 에서 지운다**(history.replaceState). 남겨 두면 브라우저 히스토리·
+   *   즐겨찾기·화면 공유에 등록 키가 그대로 노출된다 — 자동 등록의 편의가 유출 경로가 되면 안 된다.
+   * ★검증·지연·429 는 전부 기존 `/api/pos/enroll` 이 담당한다 — 이 경로는 입력 방법이 다를 뿐
+   *   새 검증 경로가 아니다(관문이 둘이 되는 순간 어느 쪽이 열려 있는지 아무도 추적하지 못한다).
+   * ★실패하면 수동 입력 폼으로 그대로 낙하하고 사유를 보여 준다(무한 재시도하지 않는다 —
+   *   틀린 키가 URL 에 박힌 채 재시도가 돌면 스로틀이 정상 등록까지 막는다).
+   */
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (autoTried.current) return;
+    const url = new URL(window.location.href);
+    const urlKey = url.searchParams.get("key");
+    if (!urlKey) return;
+    autoTried.current = true;
+    url.searchParams.delete("key");
+    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+    api
+      .post("/api/pos/enroll", { key: urlKey }, { noRedirect: true, noCsrf: true })
+      .then(() => onEnrolled())
+      .catch((cause) => setError(errorBodyOf(cause).message))
+      .finally(() => setBusy(false));
+  }, [onEnrolled]);
 
   const submit = useCallback(
     async (event: React.FormEvent) => {

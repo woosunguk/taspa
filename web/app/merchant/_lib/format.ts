@@ -25,7 +25,10 @@ export const MEAL_WINDOWS = ["BREAKFAST", "LUNCH", "DINNER"] as const;
  */
 const FORECAST_METHOD: Record<string, string> = {
   SEASONAL_NAIVE: "전주 동요일",
+  SEASONAL_NAIVE_ADJUSTED: "전주 동요일·연차 보정",
   FOUR_WEEK_AVG: "최근 4주 평균",
+  // 조직 분해 합산 셀 — 조직마다 방법이 달라 하나의 이름이 성립하지 않는다(조직별 방법은 분해에 있다).
+  COMPOSITE: "조직별 합산",
   NO_DATA: "데이터 없음",
 };
 

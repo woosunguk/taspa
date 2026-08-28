@@ -20,8 +20,12 @@ interface OverrideForm {
   perMealLimitMinor: string;
   dailyMealCount: string;
   monthlyCapMinor: string;
+  breakfastStart: string;
+  breakfastEnd: string;
   lunchStart: string;
   lunchEnd: string;
+  dinnerStart: string;
+  dinnerEnd: string;
   effectiveFrom: string;
   effectiveTo: string;
   reason: string;
@@ -33,12 +37,29 @@ const EMPTY: OverrideForm = {
   perMealLimitMinor: "",
   dailyMealCount: "",
   monthlyCapMinor: "",
+  breakfastStart: "",
+  breakfastEnd: "",
   lunchStart: "",
   lunchEnd: "",
+  dinnerStart: "",
+  dinnerEnd: "",
   effectiveFrom: "",
   effectiveTo: "",
   reason: "",
 };
+
+/**
+ * 재정의할 수 있는 끼니창 3종. **서버는 처음부터 6개 필드를 다 받았고**(MealPolicyOverrideRequest),
+ * DB CHECK 도 끼니별 쌍 원자성·순서를 세 끼 모두에 걸어 두었다 — 화면만 점심 하나를 노출하고 있었다.
+ * 목록으로 도는 이유: JSX 를 세 번 복제하면 한 끼만 고치는 실수가 반드시 생긴다.
+ */
+type TimeKey = "breakfastStart" | "breakfastEnd" | "lunchStart" | "lunchEnd" | "dinnerStart" | "dinnerEnd";
+
+const MEAL_WINDOWS: { label: string; start: TimeKey; end: TimeKey }[] = [
+  { label: "아침", start: "breakfastStart", end: "breakfastEnd" },
+  { label: "점심", start: "lunchStart", end: "lunchEnd" },
+  { label: "저녁", start: "dinnerStart", end: "dinnerEnd" },
+];
 
 function toTime(value: string | null): string {
   return value ? value.slice(0, 5) : "";
@@ -96,8 +117,12 @@ export function OverrideSection({
       perMealLimitMinor: numberOrNull(next.perMealLimitMinor),
       dailyMealCount: numberOrNull(next.dailyMealCount),
       monthlyCapMinor: numberOrNull(next.monthlyCapMinor),
+      breakfastStart: textOrNull(next.breakfastStart),
+      breakfastEnd: textOrNull(next.breakfastEnd),
       lunchStart: textOrNull(next.lunchStart),
       lunchEnd: textOrNull(next.lunchEnd),
+      dinnerStart: textOrNull(next.dinnerStart),
+      dinnerEnd: textOrNull(next.dinnerEnd),
       effectiveFrom: textOrNull(next.effectiveFrom),
       effectiveTo: textOrNull(next.effectiveTo),
       reason: textOrNull(next.reason),
@@ -132,8 +157,12 @@ export function OverrideSection({
       perMealLimitMinor: target.perMealLimitMinor?.toString() ?? "",
       dailyMealCount: target.dailyMealCount?.toString() ?? "",
       monthlyCapMinor: target.monthlyCapMinor?.toString() ?? "",
+      breakfastStart: toTime(target.breakfastStart),
+      breakfastEnd: toTime(target.breakfastEnd),
       lunchStart: toTime(target.lunchStart),
       lunchEnd: toTime(target.lunchEnd),
+      dinnerStart: toTime(target.dinnerStart),
+      dinnerEnd: toTime(target.dinnerEnd),
       effectiveFrom: target.effectiveFrom ?? "",
       effectiveTo: target.effectiveTo ?? "",
       reason: target.reason ?? "",
@@ -251,24 +280,35 @@ export function OverrideSection({
             </Field>
           </div>
 
-          <Field label="점심 시간" hint="시작과 종료를 함께 지정하거나, 둘 다 비워 조직 기준을 씁니다.">
-            {/* 조직 기준 폼과 같은 이유로 고정폭을 쓰지 않는다(좁은 화면에서 AM/PM 이 잘린다). */}
-            <div className="grid max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <Input
-                aria-label="점심 시작"
-                type="time"
-                className="w-full min-w-0"
-                value={form.lunchStart}
-                onChange={(event) => set("lunchStart", event.target.value)}
-              />
-              <span className="text-sm text-muted-foreground">~</span>
-              <Input
-                aria-label="점심 종료"
-                type="time"
-                className="w-full min-w-0"
-                value={form.lunchEnd}
-                onChange={(event) => set("lunchEnd", event.target.value)}
-              />
+          <Field
+            label="끼니 시간"
+            hint="끼니별로 시작·종료를 함께 지정하거나, 둘 다 비워 조직 기준을 물려받습니다."
+          >
+            <div className="flex flex-col gap-3">
+              {MEAL_WINDOWS.map((meal) => (
+                /* 조직 기준 폼과 같은 이유로 고정폭을 쓰지 않는다(좁은 화면에서 AM/PM 이 잘린다). */
+                <div
+                  key={meal.label}
+                  className="grid max-w-md grid-cols-[2.5rem_1fr_auto_1fr] items-center gap-2"
+                >
+                  <span className="text-sm text-muted-foreground">{meal.label}</span>
+                  <Input
+                    aria-label={`${meal.label} 시작`}
+                    type="time"
+                    className="w-full min-w-0"
+                    value={form[meal.start]}
+                    onChange={(event) => set(meal.start, event.target.value)}
+                  />
+                  <span className="text-sm text-muted-foreground">~</span>
+                  <Input
+                    aria-label={`${meal.label} 종료`}
+                    type="time"
+                    className="w-full min-w-0"
+                    value={form[meal.end]}
+                    onChange={(event) => set(meal.end, event.target.value)}
+                  />
+                </div>
+              ))}
             </div>
           </Field>
 

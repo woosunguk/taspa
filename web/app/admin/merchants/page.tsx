@@ -56,6 +56,8 @@ interface Draft {
   status: string;
   siteId: string;
   timezone: string;
+  /** 정액 단가(원, 문자열 입력). 빈 값 = 설정 안 함(POS 가 금액을 직접 입력받는다). */
+  defaultPrice: string;
 }
 
 /*
@@ -73,6 +75,7 @@ const EMPTY: Draft = {
   status: "ACTIVE",
   siteId: "",
   timezone: "Asia/Seoul",
+  defaultPrice: "",
 };
 
 export default function AdminMerchantsPage() {
@@ -109,6 +112,13 @@ export default function AdminMerchantsPage() {
       siteId: draft.siteId.trim() || null,
       // 비우면(직접 입력을 지우면) 생성은 UTC, 수정은 기존 값 유지 — 서버가 full-replace 하지 않는다.
       timezone: draft.timezone.trim() || null,
+      /*
+       * 정액 단가도 서버가 full-replace 하지 않는다(미전송 = 유지). 그래서 **비운 것**과 **안 보낸 것**을
+       * 구분해 보내야 한다 — 빈 칸은 "해제"라는 사용자의 의사이므로 명시 플래그로 전달한다.
+       * 이 구분이 없으면 단가를 한 번 설정한 매장은 화면에서 되돌릴 방법이 없다.
+       */
+      defaultPriceMinor: draft.defaultPrice.trim() ? Number(draft.defaultPrice.trim()) : null,
+      clearDefaultPrice: draft.defaultPrice.trim() === "",
     };
     try {
       if (draft.id) await api.put<MerchantView>(`/api/admin/merchants/${draft.id}`, body);
@@ -275,6 +285,7 @@ export default function AdminMerchantsPage() {
                               status: merchant.status,
                               siteId: merchant.siteId ?? "",
                               timezone: merchant.timezone,
+                              defaultPrice: merchant.defaultPriceMinor?.toString() ?? "",
                             });
                           }}
                         >
@@ -373,6 +384,13 @@ export default function AdminMerchantsPage() {
                 hint="IANA 존 이름. 비워두면 위 안내대로 처리됩니다."
               />
             )}
+            <TextField
+              label="정액 단가 (원)"
+              value={draft.defaultPrice}
+              onChange={(value) => setDraft({ ...draft, defaultPrice: value.replace(/[^0-9]/g, "") })}
+              placeholder="예: 12000"
+              hint="설정하면 POS 가 금액 입력 없이 이 값으로 즉시 승인합니다(계산원이 매번 타이핑하지 않습니다). 비우면 해제되어 금액을 직접 입력합니다. 품목마다 값이 다른 매장은 비워 두세요."
+            />
           </>
         )}
       </Modal>

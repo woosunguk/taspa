@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { LockIcon } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -8,17 +9,47 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /* 화면 상태(로딩·비어있음·오류)를 한 곳에서 정의한다. shadcn 이 제공하지 않는 앱 고유 조각만 여기 둔다. */
 
-export function Loading({ label = "불러오는 중" }: { label?: string }) {
+/**
+ * 로딩 표시.
+ *
+ * `brand`(기본)는 **화면 전체를 기다릴 때** 쓴다 — 브랜드 심볼이 숨쉬듯 뛴다. 작은 영역(표 한 칸,
+ * 버튼 옆)에서는 `variant="inline"` 의 원형 스피너를 쓴다: 큰 그림이 작은 자리에 들어가면 그 영역이
+ * 무엇을 기다리는지가 아니라 그림이 먼저 읽힌다.
+ */
+export function Loading({
+  label = "불러오는 중",
+  variant = "brand",
+}: {
+  label?: string;
+  variant?: "brand" | "inline";
+}) {
+  if (variant === "inline") {
+    return (
+      <div
+        className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground"
+        role="status"
+      >
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"
+          aria-hidden
+        />
+        {label}
+      </div>
+    );
+  }
   return (
-    <div
-      className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground"
-      role="status"
-    >
-      <span
-        className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary"
+    <div className="flex flex-col items-center justify-center gap-3 px-4 py-14" role="status">
+      {/* 회전이 아니라 **맥동**이다 — 캐릭터 얼굴이 뒤집혀 돌아가면 브랜드가 우스워진다. */}
+      <Image
+        src="/brand/vegetable_bowl_face_transparent.png"
+        alt=""
         aria-hidden
+        width={363}
+        height={374}
+        priority
+        className="h-16 w-auto animate-pulse"
       />
-      {label}
+      <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -45,14 +76,24 @@ export function EmptyState({
   description,
   action,
   icon,
+  illustration,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   icon?: ReactNode;
+  /**
+   * 브랜드 일러스트 경로(`/brand/*.png`). 빈 화면은 사용자가 **아무것도 하지 않았을 때 가장 오래 보는
+   * 화면**이라 여기서 제품의 표정이 정해진다. 다만 그림이 안내 문구를 밀어내면 안 되므로 아이콘과
+   * 함께 쓰지 않는다(둘 다 주면 일러스트가 이긴다).
+   */
+  illustration?: string;
 }) {
   return (
     <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+      {illustration && !icon && (
+        <Image src={illustration} alt="" aria-hidden width={512} height={430} className="h-32 w-auto" />
+      )}
       {icon && (
         <div
           aria-hidden

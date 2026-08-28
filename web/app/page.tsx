@@ -63,6 +63,11 @@ export default function Home() {
           />
 
           <div className="flex flex-col gap-2">
+            {/*
+              ★계정 설정은 여기 두지 않는다. 헤더의 **사용자 이름**이 이미 `/account` 로 가는 진입점이고,
+              모든 화면에 항상 있다. 홈에 한 번 더 두면 이 목록이 "관리 권한"과 "내 계정"을 같은 층에
+              나열해, 매일 여는 사람에게 결정할 것을 하나 더 만든다(이 화면의 답은 식권 하나다).
+            */}
             <p className="text-label text-muted-foreground">그 밖의 메뉴</p>
             <div className="flex flex-col gap-2">
               {session.user.manageableOrgs && (
@@ -79,12 +84,6 @@ export default function Home() {
                   description="조직·사용자·클라이언트·가맹점과 IAM 정책"
                 />
               )}
-              <Entry
-                href="/account"
-                title="계정 설정"
-                description="비밀번호·2단계 인증·패스키·활성 세션"
-                external
-              />
             </div>
           </div>
         </div>

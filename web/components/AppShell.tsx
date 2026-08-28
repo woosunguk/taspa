@@ -1,46 +1,19 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Sidebar } from "./Sidebar";
 import { INTERRUPTED_KEY } from "@/lib/api";
 import { useMerchantAccess } from "@/lib/merchantAccess";
-import { displayNameOf, goToLogin, useSession, type CurrentUser } from "@/lib/session";
+import { goToLogin, useSession, type CurrentUser } from "@/lib/session";
 import { ErrorNotice, Loading } from "./feedback";
 
 /**
  * 세션 DTO 에 없는 접근 사실. `CurrentUser` 에 담을 수 없는 것만 여기 둔다 — 지금은 가맹 관리자 여부
  * (`/api/account/me` 에 플래그가 없어 목록 API 로 대신 판단한다, `lib/merchantAccess.ts`).
  */
-interface ExtraAccess {
-  merchantAdmin: boolean;
-}
-
-interface NavItem {
-  href: string;
-  label: string;
-  /** 이 항목을 볼 수 있는 사용자인지. 권한은 서버가 최종 판정하므로 여기선 **표시 여부**만 정한다. */
-  visible: (user: CurrentUser, access: ExtraAccess) => boolean;
-}
-
-/**
- * 네비게이션 항목.
- *
- * ★여기의 `visible` 은 **보안 경계가 아니다.** 실제 인가는 서버의 정책 엔진이 판정하며, 링크를 숨기는 것은
- * 쓸 수 없는 메뉴를 보여주지 않기 위한 UX 다. 숨김만 믿고 서버 검사를 빼면 안 된다(반대도 마찬가지 —
- * 링크가 보여도 서버가 거부하면 화면은 403 을 정직하게 표시한다).
- */
-const NAV: NavItem[] = [
-  { href: "/meal", label: "식권", visible: () => true },
-  { href: "/console", label: "조직 관리", visible: (u) => u.manageableOrgs },
-  {
-    href: "/merchant",
-    label: "매장 관리",
-    visible: (_u, a) => a.merchantAdmin,
-  },
-  { href: "/admin", label: "플랫폼 관리", visible: (u) => u.platformAdmin },
-];
-
 /**
  * "재인증 때문에 방금 작업이 완료되지 않았습니다" 배너.
  *
@@ -119,7 +92,7 @@ function InterruptedNotice() {
   if (!interrupted) return null;
   return (
     <div className="border-b border-warning/30 bg-warning-soft">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm text-warning">
+      <div className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm text-warning">
         <span className="font-medium">방금 작업은 완료되지 않았습니다.</span>
         <span>재인증이 필요해 중단됐습니다 — 다시 시도해 주세요.</span>
         <button
@@ -138,85 +111,108 @@ export function AppShell({ children }: { children: ReactNode }) {
   const session = useSession();
   const pathname = usePathname();
   const merchantAdmin = useMerchantAccess(session.status === "authenticated");
-  const access: ExtraAccess = { merchantAdmin };
+  // 모바일 드로어 — 경로가 바뀌면 닫는다(열린 채 화면만 바뀌면 내용이 가려진 채 남는다).
+  // ★effect 의 setState 가 아니라 **렌더 중 신호 비교**로 닫는다(이 저장소의 CI 게이트 규칙,
+  //   `react-hooks/set-state-in-effect`) — effect 방식은 새 화면 위에 드로어가 한 프레임 남는다.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPath, setDrawerPath] = useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
+    if (drawerOpen) setDrawerOpen(false);
+  }
+
+  const authenticated = session.status === "authenticated";
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full">
       {/*
-        ★헤더는 **고정**한다. 조직 콘솔 개요는 세로 2,000px 을 넘고 관리 콘솔도 비슷한데, 스크롤을
-        내리는 순간 네비게이션이 사라져 다른 영역으로 가려면 매번 맨 위로 올라와야 했다.
-        반투명 + blur 는 장식이 아니라 "이 줄은 내용 위에 떠 있다"는 신호다(불투명하면 붙어 있는지
-        떠 있는지 구분되지 않아 스크롤 중 내용이 잘린 것처럼 보인다).
+        ★데스크톱 좌측 사이드바(Gemini/Gmail 셸 패턴). 이전의 상단 탭은 하위 기능(조직 10개·관리 11개)을
+        가로 스크롤 뒤에 숨겼다 — 사이드바는 1차 영역과 현재 영역의 하위 기능 전체를 세로로 펼쳐
+        "무슨 기능이 있는지"가 첫 화면에서 보이게 한다. sticky + h-screen 이라 스크롤해도 남는다.
       */}
-      <header className="sticky top-0 z-40 border-b border-line bg-card/85 backdrop-blur-md">
-        {/*
-          ★모바일은 **두 줄**로 접는다(위: 브랜드+계정, 아래: 가로 스크롤 메뉴).
-          한 줄에 다 넣으면 390px 에서 메뉴가 눌려 "조/직/관/리" 처럼 **글자마다 줄이 바뀌어**
-          헤더를 읽을 수 없게 된다(실측). `sm:contents` 로 ≥sm 에서는 이 래퍼가 사라져
-          기존 데스크톱 한 줄 배치가 그대로 유지된다.
-        */}
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-6">
-          <div className="flex items-center justify-between gap-4 sm:contents">
-            <Link href="/" className="text-lg font-medium tracking-tight whitespace-nowrap text-foreground">
-              tas<b className="font-bold text-brand">pa</b>
-            </Link>
+      {authenticated && (
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-line bg-card lg:block">
+          <Sidebar user={session.user} merchantAdmin={merchantAdmin} />
+        </aside>
+      )}
 
-            <div className="flex items-center gap-3 whitespace-nowrap sm:order-last sm:ml-auto">
-              {session.status === "authenticated" ? (
-                <>
-                  <a
-                    href="/account"
-                    className="max-w-32 truncate text-sm text-muted-foreground hover:text-foreground sm:max-w-none"
-                  >
-                    {displayNameOf(session.user)}
-                  </a>
-                  {/* 로그아웃은 서버가 세션·쿠키를 정리해야 하므로 서버 경로로 보낸다(SPA 라우팅 아님). */}
-                  <a href="/logout" className="text-sm text-muted-foreground hover:text-foreground">
-                    로그아웃
-                  </a>
-                </>
-              ) : session.status === "anonymous" ? (
+      {/* 모바일 드로어 — 햄버거로 연다. 사이드바와 같은 내용(정의가 한 곳이어야 두 화면이 갈리지 않는다). */}
+      {authenticated && drawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="메뉴">
+          <button
+            type="button"
+            aria-label="메뉴 닫기"
+            className="absolute inset-0 bg-foreground/40"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-line bg-card shadow-xl">
+            <Sidebar
+              user={session.user}
+              merchantAdmin={merchantAdmin}
+              onNavigate={() => setDrawerOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/*
+          상단 바 — 모바일에서는 햄버거 + 워드마크, **비로그인 상태에서는 데스크톱에서도** 보인다.
+          사이드바는 로그인 사용자 전용이라, 익명 데스크톱에서 이 바까지 숨기면 브랜드도 로그인 진입점도
+          없는 맨 화면이 된다(실측으로 발견 — 홈이 문패 없는 문서처럼 떴다).
+        */}
+        <header
+          className={`sticky top-0 z-40 border-b border-line bg-card/85 backdrop-blur-md ${
+            authenticated ? "lg:hidden" : ""
+          }`}
+        >
+          <div className="flex items-center gap-3 px-4 py-2.5">
+            {authenticated && (
+              <button
+                type="button"
+                aria-label="메뉴 열기"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-line hover:text-foreground"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  aria-hidden
+                  className="size-5"
+                >
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+            <Link href="/" className="flex items-center" aria-label="taspa 홈">
+              <Image
+                src="/brand/taspa_combined_logo_transparent.png"
+                alt="taspa"
+                width={1041}
+                height={258}
+                priority
+                className="h-6 w-auto"
+              />
+            </Link>
+            <div className="ml-auto">
+              {session.status === "anonymous" && (
                 <a href="/login" className="text-sm font-medium text-primary hover:underline">
                   로그인
                 </a>
-              ) : null}
+              )}
             </div>
           </div>
+        </header>
 
-          {session.status === "authenticated" && (
-            <nav
-              className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0"
-              aria-label="주요 메뉴"
-            >
-              <div className="flex w-max items-center gap-1 sm:w-auto">
-                {NAV.filter((item) => item.visible(session.user, access)).map((item) => {
-                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={`rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${
-                        active
-                          ? "bg-accent font-semibold text-accent-foreground"
-                          : "font-medium text-muted-foreground hover:bg-line hover:text-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </nav>
-          )}
-        </div>
-      </header>
+        <InterruptedNotice />
 
-      <InterruptedNotice />
-
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {session.status === "loading" ? <Loading /> : children}
-      </main>
+        <main className="mx-auto w-full max-w-[1560px] flex-1 px-4 py-5 sm:px-6">
+          {session.status === "loading" ? <Loading /> : children}
+        </main>
+      </div>
     </div>
   );
 }

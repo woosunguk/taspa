@@ -75,6 +75,8 @@ export interface Membership {
   orgId: string;
   userId: string;
   email: string | null;
+  /** 표시 이름(users.display_name). 미설정 계정이 있어 nullable — 화면은 없으면 이메일로 내려간다. */
+  displayName: string | null;
   role: string;
   /** 자유 텍스트 부서 라벨(초대 시 입력) — 구조적 배정(departmentId)과 별개. */
   department: string | null;
@@ -211,6 +213,9 @@ export interface ForecastCell {
   /** 조직 캘린더가 그 날을 휴일로 표시했는가. **예측값과는 독립된 사실이다**(휴일에도 당직 식사가 있다). */
   holiday: boolean;
   holidayName: string | null;
+  /** 캘린더가 종일 EVENT 로 선언한 사내 행사인가. 휴일과 다른 축이다(사람은 있지만 밖에서 먹는다). */
+  event?: boolean;
+  eventName?: string | null;
 }
 
 export interface ForecastResponse {
