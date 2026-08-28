@@ -24,3 +24,8 @@ application-local.yml
 # Node
 node_modules/
 e2e/test-results/
+
+# oh-my-claudecode 런타임 상태 — 운영 잔여물(커밋 대상 아님; .omc/skills 만 예외인데 이 repo 에는 없다)
+.omc/
+web/.omc/
+e2e/.omc/
